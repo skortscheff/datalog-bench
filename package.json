@@ -3,6 +3,7 @@
   "private": true,
   "engines": { "node": ">=18" },
   "scripts": {
-    "test": "node test/run.mjs"
+    "test": "node test/run.mjs",
+    "test:db": "node --test test/db.test.mjs"
   }
 }

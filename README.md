@@ -8,13 +8,16 @@ Design document: `../Datalog-Bench-Architecture.html`
 ## Layout
 
     src/                 the six numbered parts, concatenated in filename order
-      01-shell.html      tokens, component CSS, page skeleton, empty state
+      01-shell.html      tokens, component CSS, page skeleton, empty state, history panel
       02-parse.js        channel spec, parser, unit normalisation, derived channels
       03-analyze.js      rule registry and statistics
       04-render.js       chart engine, panels, shared crosshair, readout
       05-map.js          Mercator projection, tile layer, event pins
-      06-shell.js        KPIs, findings, mapping UI, file intake, orchestration
+      06-shell.js        KPIs, findings, mapping UI, file intake, history, orchestration
     fixtures/            real logs used as the bundled sample and as test inputs
+    test/                Phase 1 Gate 5 regression suite (parser + rules + db service)
+    db/                  the "simple database service": node:http + node:sqlite API
+    docker/              nginx configs and the tiles-proxy Dockerfile
     dist/                build output (not the published copy)
     build.py             assembler and structural gate
     make-test-fixtures.py  generates synthetic logs in other shapes
@@ -48,10 +51,13 @@ works on a workstation and inside a container build stage. Override with
   (the artifact host supplies those; authoring them breaks the page)
 - HTML elements are unbalanced or unclosed
 
-This is a structural gate, not a test suite. A behavioural suite over the
-parser and the rules is Phase 1 Gate 5 in the design document, and the
-container build gate in Phase 2 is specified to run it — so that suite has to
-exist before the Phase 2 gate means anything.
+This is a structural gate, not a test suite. `test/run.mjs` is the behavioural
+suite Phase 1 Gate 5 called for — fixture-driven, golden output per fixture,
+zero dependencies (Node's built-in `node:test`) — and the container build gate
+in Phase 2 runs it, failing the image build if either gate fails. `npm test`
+runs it directly; `npm test -- --update` (re)writes golden files after an
+intentional change. `test/db.test.mjs` (`npm run test:db`) does the same for
+the `db` service.
 
 ## Ordering constraint
 
@@ -61,11 +67,30 @@ so this works — but only because all parts share one scope. Keep the filename
 order, and keep everything inside the one `(function () { ... })()` that
 `01-shell.html` opens and `06-shell.js` closes.
 
-## Known non-portable items for containerisation
+## Containerisation
 
-- The map's tile URL is hardcoded to the Esri imagery host in `05-map.js`.
-  Serving tiles through a first-party proxy needs that to become configurable;
-  the app has no config-injection mechanism today. See the design document,
-  §10.3.
-- There is no version control in this tree yet. The Phase 2 build is specified
-  to tag images with a git SHA, which requires a repository first.
+Phase 2's blockers (no version control, no config-injection mechanism for the
+tile URL, no Gate 5 suite) are closed. `docker compose up` brings up three
+services from the project root:
+
+- **`web`** — the assembled static file behind nginx, non-root, read-only root
+  filesystem, `/healthz` and `/readyz`, image labelled with the build's git SHA.
+  `05-map.js`'s tile URL is no longer hardcoded — it's a `__TILE_BASE__` token
+  `build.py --tile-base` substitutes at build time (default: the same Esri URL
+  as before, so plain `python build.py` is unchanged).
+- **`tiles`** — a caching reverse proxy in front of Esri World Imagery
+  (`docker/Dockerfile.tiles`), sized for one LAN, not a production tile
+  service. `web` reaches it through its own `/tiles/` location, not by the
+  `tiles` hostname directly — that hostname only resolves inside the compose
+  network, and the browser rendering the page needs a same-origin URL it can
+  actually load images from.
+- **`db`** — the "simple database service" (`db/`): `node:http` + `node:sqlite`
+  (both built into Node, no extra dependency), storing every log the app opens
+  with a SHA-256 content hash for duplicate detection. `/data` is a named
+  volume — the one thing in this stack meant to survive a container recreate.
+  Reached through `web`'s `/api/` location for the same same-origin reason as
+  `tiles`.
+
+This means the app's claim of pure client-side analysis no longer holds when
+served through this stack: every opened log is also persisted server-side.
+The dropzone copy and page footer say so.

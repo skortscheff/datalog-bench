@@ -386,7 +386,7 @@
     var mapped = Object.keys(L.mapping).length;
     document.getElementById("pg-foot").innerHTML =
       "<b>" + esc(L.name) + "</b> — " + L.n + " frames, " + L.head.length + " source columns, " + mapped +
-      " mapped to known channels. Parsed entirely in this browser; nothing was uploaded. Every value shown comes straight from the file with no smoothing or interpolation, and the table view holds the source columns verbatim. " +
+      " mapped to known channels. Every value shown is computed here in this browser with no smoothing or interpolation, and the table view holds the source columns verbatim. " +
       "Findings are computed from thresholds that are conventional for OBD-II diagnostics, not vehicle-specific — treat them as where to look first, not as a verdict.";
     refresh();
   }
@@ -415,7 +415,7 @@
     });
   }
 
-  function addText(text, name, isSample) {
+  function addText(text, name, isSample, fromHistory) {
     var lg = parseLog(text, name, isSample);
     if (lg.error) {
       LOGS.push({ name: name, error: lg.error, n: 0 });
@@ -426,8 +426,82 @@
     analyze(lg);
     LOGS.push(lg);
     activate(LOGS.length - 1);
+    /* the sample is bundled fixture data, not a real session, and a log
+       reloaded from history is already saved — either way there is nothing
+       new to persist */
+    if (!isSample && !fromHistory) saveToHistory(text, name);
     return true;
   }
+
+  /* ==========================================================
+     HISTORY — save-on-load and the saved-sessions panel
+     ========================================================== */
+  function saveToHistory(text, name) {
+    var note = document.getElementById("pg-foot-save");
+    fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, text: text })
+    }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        if (!note) return;
+        if (!res.ok) { note.textContent = "Could not save to history: " + (res.body.error || "server error") + "."; return; }
+        note.textContent = res.body.duplicate
+          ? "Already in history, saved " + new Date(res.body.uploadedAt).toLocaleString() + " as “" + res.body.name + "”."
+          : "Saved to history.";
+      })
+      .catch(function () { if (note) note.textContent = "Could not reach the history database."; });
+  }
+
+  function sevChip(sev) {
+    return '<span class="chip ' + esc(sev) + '"><i class="dot"></i><span>' +
+      esc(sev === "neutral" ? "Note" : sev.charAt(0).toUpperCase() + sev.slice(1)) + "</span></span>";
+  }
+
+  function loadHistoryList() {
+    var tb = document.getElementById("history-tbl").tBodies[0], note = document.getElementById("history-note");
+    note.textContent = "Loading…";
+    fetch("/api/logs").then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+      .then(function (res) {
+        tb.textContent = "";
+        if (!res.ok) { note.textContent = "Could not load history."; return; }
+        document.getElementById("history-count").textContent = res.body.length + " saved";
+        if (!res.body.length) { note.textContent = "Nothing saved yet — every log you open here is added automatically."; return; }
+        note.textContent = "Click a row to reopen that log.";
+        res.body.forEach(function (row) {
+          var tr = document.createElement("tr");
+          tr.className = "hrow";
+          tr.tabIndex = 0;
+          tr.appendChild(el("td", "nm", row.name));
+          tr.appendChild(el("td", "u", row.sessionStart || new Date(row.uploadedAt).toLocaleString()));
+          tr.appendChild(el("td", "u", String(row.rows)));
+          var td = document.createElement("td");
+          td.innerHTML = sevChip(row.severity) + " " + esc(row.headline);
+          tr.appendChild(td);
+          function open() {
+            fetch("/api/logs/" + row.id + "/raw").then(function (r) {
+              if (!r.ok) throw new Error("fetch failed");
+              return r.text();
+            }).then(function (text) {
+              addText(text, row.name, false, true);
+              show("history-wrap", false);
+            }).catch(function () { note.textContent = "Could not load that log."; });
+          }
+          tr.addEventListener("click", open);
+          tr.addEventListener("keydown", function (ev) { if (ev.key === "Enter") open(); });
+          tb.appendChild(tr);
+        });
+      })
+      .catch(function () { note.textContent = "Could not reach the history database."; });
+  }
+
+  document.getElementById("btn-history").addEventListener("click", function () {
+    var willShow = document.getElementById("history-wrap").hidden;
+    show("history-wrap", willShow);
+    if (willShow) loadHistoryList();
+  });
+  document.getElementById("history-refresh").addEventListener("click", loadHistoryList);
+  document.getElementById("history-close").addEventListener("click", function () { show("history-wrap", false); });
 
   function alertBanner(msg) {
     var b = document.getElementById("sample-banner");

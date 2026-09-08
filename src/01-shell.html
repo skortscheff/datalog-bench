@@ -265,6 +265,9 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 .maptbl select { font-family: var(--mono); font-size: 11.5px; padding: 3px 6px; max-width: 320px; width: 100%;
                  background: var(--surface-sunk); color: var(--ink); border: 1px solid var(--hair); border-radius: 4px; }
 .maptbl tr.miss td.ch { color: var(--ink-muted); }
+.maptbl tr.hrow { cursor: pointer; }
+.maptbl tr.hrow:hover td { background: var(--surface-sunk); }
+.maptbl tr.hrow td.nm { font-weight: 500; }
 
 .report { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 1px;
           background: var(--hair); border: 1px solid var(--hair); border-radius: var(--r); overflow: hidden; margin-top: 4px; }
@@ -309,8 +312,28 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
     </div>
     <div class="files" id="files"></div>
     <span class="grow"></span>
+    <button class="btn" type="button" id="btn-history">History</button>
     <button class="btn" type="button" id="btn-add">Add logs</button>
     <input type="file" id="file-input" accept=".csv,.txt,.log,text/csv,text/plain" multiple hidden>
+  </div>
+</div>
+
+<!-- saved-history panel: independent of empty/app state, toggled by the
+     History button -->
+<div class="wrap" id="history-wrap" hidden>
+  <div class="card lift">
+    <header>
+      <h3>Saved history</h3>
+      <span class="unit" id="history-count">&mdash;</span>
+      <span class="grow"></span>
+      <button class="btn ghost" type="button" id="history-refresh">Refresh</button>
+      <button class="btn ghost" type="button" id="history-close">Close</button>
+    </header>
+    <table class="maptbl" id="history-tbl">
+      <thead><tr><th>Name</th><th>Session start</th><th>Rows</th><th>Worst finding</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="note" id="history-note">&mdash;</p>
   </div>
 </div>
 
@@ -318,7 +341,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
 <div class="wrap hero-empty" id="empty" hidden>
   <div class="dropzone" id="dropzone-big">
     <h2>Drop an OBD-II datalog to analyse it</h2>
-    <p>CSV or tab-delimited text from Torque, OBDLink, Car Scanner, ScanXL and similar loggers. Everything is parsed in this browser &mdash; your logs are never uploaded anywhere.</p>
+    <p>CSV or tab-delimited text from Torque, OBDLink, Car Scanner, ScanXL and similar loggers. Every chart and finding is computed right here in this browser.</p>
     <div class="acts">
       <button class="btn primary" type="button" id="btn-pick">Choose files</button>
       <button class="btn" type="button" id="btn-sample">Load the sample log</button>
@@ -329,7 +352,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
       <div><dt>Converts</dt><dd>&deg;F to &deg;C, mph to km/h, AFR to lambda, feet to metres</dd></div>
       <div><dt>Diagnoses</dt><dd>Fuel trim, bank balance, load dependence, thermals, catalyst, charging, log quality</dd></div>
     </dl>
-    <p class="fine">Nothing leaves your machine except satellite map tiles, which are requested only if a log carries GPS and only when the satellite basemap is on.</p>
+    <p class="fine">Every log you open here is also saved to this server's database for history and duplicate detection &mdash; re-opening the same export is recognised, not re-saved. Satellite map tiles are requested only if a log carries GPS and only when the satellite basemap is on.</p>
   </div>
 </div>
 
@@ -446,6 +469,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
     <p class="tbl-meta" id="tbl-meta">&mdash;</p>
 
     <footer class="pg" id="pg-foot"></footer>
+    <p class="tbl-meta" id="pg-foot-save">&mdash;</p>
   </div>
 </div>
 

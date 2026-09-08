@@ -17,6 +17,7 @@ services:
       - /tmp:uid=10001,gid=10001,mode=0755
     depends_on:
       - tiles
+      - db
     healthcheck:
       # 127.0.0.1, not localhost: localhost resolves ::1 first inside the
       # container and nginx here only listens on IPv4.
@@ -40,3 +41,25 @@ services:
       - /var/run:uid=10001,gid=10001,mode=0755
       - /tmp:uid=10001,gid=10001,mode=0755
       - /etc/nginx/conf.d:uid=10001,gid=10001,mode=0755
+
+  # Simple database service: an HTTP API in front of a SQLite file, storing
+  # every log the app opens with a content-hash dedup key. /data is a named
+  # volume, not tmpfs — it's the one thing in this stack meant to survive a
+  # container recreate.
+  db:
+    build:
+      context: .
+      dockerfile: db/Dockerfile
+    volumes:
+      - db-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=0755
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  db-data:
