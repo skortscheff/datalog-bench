@@ -1,0 +1,35 @@
+# Caching reverse proxy in front of the Esri World Imagery tile service.
+# Sized for one LAN, one user, occasional map views — not a production tile
+# service. Eviction is nginx's built-in cache manager (LRU-style once
+# max_size is hit); no custom eviction logic needed.
+#
+# nginx's stock docker-entrypoint envsubst's ${VAR} references in any
+# /etc/nginx/templates/*.template file into /etc/nginx/conf.d/ on container
+# start, so TILE_CACHE_TTL / TILE_CACHE_MAX_SIZE_MB come from real
+# environment variables with no custom entrypoint needed.
+proxy_cache_path /var/cache/nginx/tiles levels=1:2 keys_zone=tiles:10m
+    max_size=${TILE_CACHE_MAX_SIZE_MB}m inactive=7d use_temp_path=off;
+
+server {
+    listen 8080;
+    server_tokens off;
+
+    location = /healthz {
+        default_type application/json;
+        return 200 '{"status":"ok"}';
+    }
+
+    location / {
+        # proxy_pass with no path of its own would forward the request URI
+        # verbatim ("/{z}/{y}/{x}"), dropping Esri's actual path prefix — the
+        # prefix has to be part of proxy_pass itself.
+        proxy_pass https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/;
+        proxy_cache tiles;
+        proxy_cache_valid 200 ${TILE_CACHE_TTL}s;
+        proxy_cache_use_stale error timeout updating http_502 http_503 http_504;
+        proxy_set_header Host server.arcgisonline.com;
+        proxy_ssl_server_name on;
+        add_header X-Cache-Status $upstream_cache_status always;
+        add_header X-Tile-Attribution "Imagery (c) Esri, Maxar, Earthstar Geographics" always;
+    }
+}

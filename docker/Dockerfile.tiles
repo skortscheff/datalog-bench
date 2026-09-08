@@ -1,0 +1,20 @@
+# Caching reverse proxy in front of the map tile upstream (Esri by default).
+# Same nginx-alpine family as the web service — one thing to operate.
+FROM nginx:1.27-alpine
+RUN adduser -D -H -u 10001 appuser \
+    && rm -f /etc/nginx/conf.d/default.conf \
+    && mkdir -p /var/cache/nginx/tiles /var/run \
+    && chown -R appuser:appuser /var/cache/nginx /var/run /var/log/nginx
+COPY nginx-tiles.conf.template /etc/nginx/templates/nginx-tiles.conf.template
+ENV TILE_CACHE_TTL=2592000
+ENV TILE_CACHE_MAX_SIZE_MB=512
+USER appuser
+EXPOSE 8080
+
+# Run with --read-only + tmpfs mounts owned by uid/gid 10001, same as the web
+# service, e.g.:
+#   docker run --read-only \
+#     --tmpfs /var/cache/nginx/tiles:uid=10001,gid=10001,mode=0755 \
+#     --tmpfs /var/run:uid=10001,gid=10001,mode=0755 \
+#     --tmpfs /tmp:uid=10001,gid=10001,mode=0755 \
+#     -p 8081:8080 datalog-bench-tiles:test

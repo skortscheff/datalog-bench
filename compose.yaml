@@ -1,0 +1,37 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        TILE_BASE: "http://tiles:8080/{z}/{y}/{x}"
+        GIT_SHA: "${GIT_SHA:-dev}"
+    ports:
+      - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=10001,gid=10001,mode=0755
+      - /var/run:uid=10001,gid=10001,mode=0755
+      - /tmp:uid=10001,gid=10001,mode=0755
+    healthcheck:
+      # 127.0.0.1, not localhost: localhost resolves ::1 first inside the
+      # container and nginx here only listens on IPv4.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  tiles:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.tiles
+    environment:
+      TILE_CACHE_TTL: "2592000"
+      TILE_CACHE_MAX_SIZE_MB: "512"
+    ports:
+      - "8081:8080"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=10001,gid=10001,mode=0755
+      - /var/run:uid=10001,gid=10001,mode=0755
+      - /tmp:uid=10001,gid=10001,mode=0755
+      - /etc/nginx/conf.d:uid=10001,gid=10001,mode=0755
