@@ -3,7 +3,10 @@ services:
     build:
       context: .
       args:
-        TILE_BASE: "http://tiles:8080/{z}/{y}/{x}"
+        # Same-origin relative path, proxied to the tiles service by web's own
+        # nginx config (see docker/nginx-web.conf) — the browser can reach
+        # this; it can't reach the "tiles" hostname directly.
+        TILE_BASE: "/tiles/{z}/{y}/{x}"
         GIT_SHA: "${GIT_SHA:-dev}"
     ports:
       - "8080:8080"
@@ -12,6 +15,8 @@ services:
       - /var/cache/nginx:uid=10001,gid=10001,mode=0755
       - /var/run:uid=10001,gid=10001,mode=0755
       - /tmp:uid=10001,gid=10001,mode=0755
+    depends_on:
+      - tiles
     healthcheck:
       # 127.0.0.1, not localhost: localhost resolves ::1 first inside the
       # container and nginx here only listens on IPv4.
