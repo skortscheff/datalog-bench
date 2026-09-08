@@ -458,20 +458,61 @@
       esc(sev === "neutral" ? "Note" : sev.charAt(0).toUpperCase() + sev.slice(1)) + "</span></span>";
   }
 
+  var CMP_MAX = 4;
+  var CMP_SEL = {}; /* id -> {id, name} */
+
+  function updateCompareBtn() {
+    var n = Object.keys(CMP_SEL).length;
+    var b = document.getElementById("btn-compare");
+    b.textContent = "Compare selected (" + n + ")";
+    b.disabled = n < 2;
+  }
+
+  function fetchRawLog(id) {
+    return fetch("/api/logs/" + id + "/raw").then(function (r) {
+      if (!r.ok) throw new Error("fetch failed");
+      return r.text();
+    });
+  }
+
   function loadHistoryList() {
     var tb = document.getElementById("history-tbl").tBodies[0], note = document.getElementById("history-note");
     note.textContent = "Loading…";
+    CMP_SEL = {};
+    updateCompareBtn();
     fetch("/api/logs").then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
       .then(function (res) {
         tb.textContent = "";
         if (!res.ok) { note.textContent = "Could not load history."; return; }
         document.getElementById("history-count").textContent = res.body.length + " saved";
         if (!res.body.length) { note.textContent = "Nothing saved yet — every log you open here is added automatically."; return; }
-        note.textContent = "Click a row to reopen that log.";
+        note.textContent = "Click a row to reopen that log, or check up to " + CMP_MAX + " to compare them.";
         res.body.forEach(function (row) {
           var tr = document.createElement("tr");
           tr.className = "hrow";
           tr.tabIndex = 0;
+
+          var tdc = el("td", "cbx");
+          var cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.setAttribute("aria-label", "Select " + row.name + " to compare");
+          cb.addEventListener("click", function (ev) { ev.stopPropagation(); });
+          cb.addEventListener("change", function () {
+            if (cb.checked) {
+              if (Object.keys(CMP_SEL).length >= CMP_MAX) {
+                cb.checked = false;
+                note.textContent = "Up to " + CMP_MAX + " at a time — uncheck one first.";
+                return;
+              }
+              CMP_SEL[row.id] = { id: row.id, name: row.name };
+            } else {
+              delete CMP_SEL[row.id];
+            }
+            updateCompareBtn();
+          });
+          tdc.appendChild(cb);
+          tr.appendChild(tdc);
+
           tr.appendChild(el("td", "nm", row.name));
           tr.appendChild(el("td", "u", row.sessionStart || new Date(row.uploadedAt).toLocaleString()));
           tr.appendChild(el("td", "u", String(row.rows)));
@@ -479,10 +520,7 @@
           td.innerHTML = sevChip(row.severity) + " " + esc(row.headline);
           tr.appendChild(td);
           function open() {
-            fetch("/api/logs/" + row.id + "/raw").then(function (r) {
-              if (!r.ok) throw new Error("fetch failed");
-              return r.text();
-            }).then(function (text) {
+            fetchRawLog(row.id).then(function (text) {
               addText(text, row.name, false, true);
               show("history-wrap", false);
             }).catch(function () { note.textContent = "Could not load that log."; });
@@ -494,6 +532,121 @@
       })
       .catch(function () { note.textContent = "Could not reach the history database."; });
   }
+
+  /* ==========================================================
+     COMPARE — two to four saved sessions, side by side
+     ========================================================== */
+  function compareMetrics(L, name) {
+    var ctx = L.ctx, C = L.cols;
+    var idle = ctx.byState.idle, drive = ctx.byState.driving;
+    /* mirrors drawKpis' own closed-loop share exactly, rather than reusing
+       L.closedLoop — that's null whenever no frame ever hit closed loop,
+       even if the fs1 channel itself is present */
+    var closedLoopPct = null;
+    if (L.have.fs1) {
+      var run = ctx.all.filter(function (i) { return !L.have.ect || C.ect[i] > 70; });
+      var clCount = 0, ri;
+      for (ri = 0; ri < run.length; ri++) if (C.fs1[run[ri]] === 2 || C.fs1[run[ri]] === 16) clCount++;
+      closedLoopPct = run.length ? (clCount / run.length * 100) : null;
+    }
+    return {
+      name: name, sessionStart: (L.report.preamble[0] || "").replace("# StartTime = ", "") || null, rows: L.n,
+      closedLoopPct: closedLoopPct,
+      tt1Idle: L.have.tt1 ? medOf(pick(C.tt1, idle)) : null, tt1Drive: L.have.tt1 ? medOf(pick(C.tt1, drive)) : null,
+      tt2Idle: L.have.tt2 ? medOf(pick(C.tt2, idle)) : null, tt2Drive: L.have.tt2 ? medOf(pick(C.tt2, drive)) : null,
+      peakEct: L.have.ect ? maxOf(C.ect, ctx.all) : null, peakIat: L.have.iat ? maxOf(C.iat, ctx.all) : null,
+      volt: L.have.volt ? medOf(pick(C.volt, ctx.all)) : null,
+      findings: L.findings || []
+    };
+  }
+
+  function runCompare() {
+    var sel = Object.keys(CMP_SEL).map(function (k) { return CMP_SEL[k]; });
+    var note = document.getElementById("compare-note");
+    note.textContent = "Loading…";
+    show("compare-wrap", true); show("history-wrap", false);
+    Promise.all(sel.map(function (s) { return fetchRawLog(s.id).then(function (text) { return { text: text, name: s.name }; }); }))
+      .then(function (loaded) {
+        var cols = loaded.map(function (x) {
+          var L = parseLog(x.text, x.name, false);
+          if (L.error) return { name: x.name, error: L.error };
+          analyze(L);
+          return compareMetrics(L, x.name);
+        });
+        renderCompare(cols);
+        note.textContent = "Idle/driving trim and closed-loop share come from each log's own warm frames.";
+      })
+      .catch(function () { note.textContent = "Could not load the selected logs."; });
+  }
+
+  function renderCompare(cols) {
+    var thead = document.getElementById("compare-tbl").tHead, tb = document.getElementById("compare-tbl").tBodies[0];
+    thead.textContent = ""; tb.textContent = "";
+    var tr0 = document.createElement("tr");
+    tr0.appendChild(document.createElement("th"));
+    cols.forEach(function (c) {
+      var th = document.createElement("th");
+      th.innerHTML = "<div>" + esc(c.name) + "</div><div class=\"u\">" + esc(c.sessionStart || "") + "</div>";
+      tr0.appendChild(th);
+    });
+    thead.appendChild(tr0);
+
+    function grpRow(label) {
+      var tr = document.createElement("tr"); tr.className = "grp";
+      var td = document.createElement("td"); td.colSpan = cols.length + 1; td.textContent = label;
+      tr.appendChild(td); tb.appendChild(tr);
+    }
+    function metricRow(label, get, fmtFn, unit) {
+      var tr = document.createElement("tr");
+      tr.appendChild(el("td", "mlab", label));
+      cols.forEach(function (c) {
+        var td = el("td", "mval", c.error ? "—" : fmtFn(get(c)) + (get(c) == null ? "" : " " + (unit || "")));
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    }
+
+    var anyErr = cols.some(function (c) { return c.error; });
+    if (anyErr) {
+      var tre = document.createElement("tr");
+      tre.appendChild(el("td", "mlab", "Parse status"));
+      cols.forEach(function (c) { tre.appendChild(el("td", "mval", c.error || "OK")); });
+      tb.appendChild(tre);
+    }
+
+    grpRow("Session");
+    metricRow("Rows", function (c) { return c.rows; }, function (v) { return String(v); });
+    metricRow("Closed loop", function (c) { return c.closedLoopPct; }, function (v) { return v == null ? "—" : v.toFixed(0); }, "%");
+
+    grpRow("Fuel trim (STFT+LTFT)");
+    metricRow("Bank 1, idle", function (c) { return c.tt1Idle; }, sgn, "%");
+    metricRow("Bank 1, driving", function (c) { return c.tt1Drive; }, sgn, "%");
+    metricRow("Bank 2, idle", function (c) { return c.tt2Idle; }, sgn, "%");
+    metricRow("Bank 2, driving", function (c) { return c.tt2Drive; }, sgn, "%");
+
+    grpRow("Other channels");
+    metricRow("Peak coolant", function (c) { return c.peakEct; }, function (v) { return fmt(v, 0); }, "°C");
+    metricRow("Peak intake air", function (c) { return c.peakIat; }, function (v) { return fmt(v, 0); }, "°C");
+    metricRow("Module voltage", function (c) { return c.volt; }, function (v) { return fmt(v, 2); }, "V");
+
+    grpRow("Findings, by rule");
+    var ruleOrder = [], seen = {};
+    cols.forEach(function (c) { (c.findings || []).forEach(function (f) { if (!seen[f.id]) { seen[f.id] = f.tag; ruleOrder.push(f.id); } }); });
+    ruleOrder.forEach(function (id) {
+      var tr = document.createElement("tr");
+      tr.appendChild(el("td", "mlab", seen[id]));
+      cols.forEach(function (c) {
+        var f = (c.findings || []).filter(function (x) { return x.id === id; })[0];
+        var td = document.createElement("td");
+        td.innerHTML = f ? sevChip(f.sev) + ' <span style="font-size:11.5px">' + esc(f.h) + "</span>" : '<span style="color:var(--ink-muted)">— not run —</span>';
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+  }
+
+  document.getElementById("btn-compare").addEventListener("click", runCompare);
+  document.getElementById("compare-close").addEventListener("click", function () { show("compare-wrap", false); });
 
   document.getElementById("btn-history").addEventListener("click", function () {
     var willShow = document.getElementById("history-wrap").hidden;

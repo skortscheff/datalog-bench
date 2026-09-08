@@ -15,7 +15,10 @@ import argparse
 import io
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -94,6 +97,27 @@ def build(src_dir, sample_path, out_path, check_only=False, tile_base=DEFAULT_TI
             break
     if stack:
         problems.append("unclosed element(s): %s" % ", ".join(t for t, _ in stack[:5]))
+
+    # Tag balance says nothing about whether the code inside <script> is valid
+    # JS — a mismatched quote inside a string literal balances every tag fine
+    # while corrupting everything parsed after it. Node is already required
+    # for the Gate 5 suite in this same build context, so use it here too.
+    script_bodies = re.findall(r"<script(?:\s+id=\"sample-csv\"[^>]*)?>(.*?)</script>", doc, re.S)
+    app_script = script_bodies[-1] if len(script_bodies) == 2 else None
+    if app_script is not None:
+        node = shutil.which("node")
+        if node is None:
+            sys.stderr.write("WARN  node not found on PATH; skipping JS syntax check\n")
+        else:
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".js")
+            try:
+                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                    f.write(app_script)
+                r = subprocess.run([node, "--check", tmp_path], capture_output=True, text=True)
+                if r.returncode != 0:
+                    problems.append("app script fails node --check:\n" + r.stderr.strip())
+            finally:
+                os.unlink(tmp_path)
 
     if problems:
         for p in problems:
