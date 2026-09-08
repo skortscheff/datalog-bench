@@ -1,0 +1,99 @@
+{
+  "error": null,
+  "have": {
+    "t": true,
+    "rpm": true,
+    "vss": true,
+    "load": true,
+    "tps": true,
+    "maf": true,
+    "spark": true,
+    "ect": true,
+    "iat": true,
+    "stft1": true,
+    "ltft1": true,
+    "stft2": true,
+    "ltft2": true,
+    "lam1": true,
+    "lam2": true,
+    "o2b1s2": true,
+    "o2b2s2": true,
+    "fs1": true,
+    "lat": true,
+    "lon": true,
+    "alt": true,
+    "tt1": true,
+    "tt2": true,
+    "lean": true,
+    "dt": true
+  },
+  "report": {
+    "delim": ",",
+    "headerLine": 2,
+    "columns": 25,
+    "rows": 581,
+    "skipped": 0,
+    "ragged": 0,
+    "decComma": false,
+    "preamble": [
+      "# StartTime = 09/08/2026 08:10:33.2382 AM"
+    ],
+    "warnings": []
+  },
+  "findings": [
+    {
+      "id": "cat",
+      "sev": "serious",
+      "tag": "Catalyst",
+      "h": "Post-catalyst sensors are swinging"
+    },
+    {
+      "id": "trim-level",
+      "sev": "warning",
+      "tag": "Fuel trim",
+      "h": "Engine running lean, ECU adding fuel to compensate"
+    },
+    {
+      "id": "gaps",
+      "sev": "warning",
+      "tag": "Log quality",
+      "h": "14 sampling gaps in the capture"
+    },
+    {
+      "id": "load-dep",
+      "sev": "neutral",
+      "tag": "Load dependence",
+      "h": "Correction is flat across load"
+    },
+    {
+      "id": "iat",
+      "sev": "neutral",
+      "tag": "Intake air",
+      "h": "Intake air reaches 84 °C"
+    },
+    {
+      "id": "ratio",
+      "sev": "neutral",
+      "tag": "Driveline",
+      "h": "8 frames where engine speed outruns road speed"
+    },
+    {
+      "id": "coverage",
+      "sev": "neutral",
+      "tag": "Coverage",
+      "h": "1 diagnostic channel missing from this log"
+    },
+    {
+      "id": "bank-balance",
+      "sev": "good",
+      "tag": "Bank balance",
+      "h": "Both banks are corrected by the same amount"
+    },
+    {
+      "id": "ect",
+      "sev": "good",
+      "tag": "Cooling",
+      "h": "Coolant temperature stayed normal"
+    }
+  ]
+}

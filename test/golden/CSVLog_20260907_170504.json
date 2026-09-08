@@ -1,0 +1,87 @@
+{
+  "error": null,
+  "have": {
+    "t": true,
+    "rpm": true,
+    "vss": true,
+    "load": true,
+    "tps": true,
+    "maf": true,
+    "spark": true,
+    "ect": true,
+    "iat": true,
+    "stft1": true,
+    "ltft1": true,
+    "stft2": true,
+    "ltft2": true,
+    "lam1": true,
+    "lam2": true,
+    "o2b1s2": true,
+    "o2b2s2": true,
+    "fs1": true,
+    "lat": true,
+    "lon": true,
+    "alt": true,
+    "tt1": true,
+    "tt2": true,
+    "lean": true,
+    "dt": true
+  },
+  "report": {
+    "delim": ",",
+    "headerLine": 2,
+    "columns": 25,
+    "rows": 207,
+    "skipped": 0,
+    "ragged": 0,
+    "decComma": false,
+    "preamble": [
+      "# StartTime = 09/07/2026 05:05:04.2681 PM"
+    ],
+    "warnings": []
+  },
+  "findings": [
+    {
+      "id": "trim-level",
+      "sev": "critical",
+      "tag": "Fuel trim",
+      "h": "Engine running lean, ECU adding fuel to compensate"
+    },
+    {
+      "id": "cat",
+      "sev": "serious",
+      "tag": "Catalyst",
+      "h": "Post-catalyst sensors are swinging"
+    },
+    {
+      "id": "coverage",
+      "sev": "neutral",
+      "tag": "Coverage",
+      "h": "1 diagnostic channel missing from this log"
+    },
+    {
+      "id": "bank-balance",
+      "sev": "good",
+      "tag": "Bank balance",
+      "h": "Both banks are corrected by the same amount"
+    },
+    {
+      "id": "iat",
+      "sev": "good",
+      "tag": "Intake air",
+      "h": "Intake air stays cool"
+    },
+    {
+      "id": "ect",
+      "sev": "good",
+      "tag": "Cooling",
+      "h": "Coolant temperature stayed normal"
+    },
+    {
+      "id": "gaps",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "Clean capture at 3.58 s per frame"
+    }
+  ]
+}

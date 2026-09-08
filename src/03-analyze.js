@@ -4,6 +4,7 @@
      when they are absent. A rule that passes still reports, so
      a healthy log says so rather than going quiet.
      ========================================================== */
+  var RULESET_VERSION = "1.0.0";
   var SEV_RANK = { critical: 0, serious: 1, warning: 2, neutral: 3, good: 4 };
 
   function med(a) {
@@ -348,5 +349,6 @@
     out.sort(function (a, b) { return SEV_RANK[a.sev] - SEV_RANK[b.sev]; });
     L.findings = out;
     L.ctx = ctx;
+    L.rulesetVersion = RULESET_VERSION;
     return out;
   }

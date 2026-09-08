@@ -1,3 +1,7 @@
+  /* Bump by hand when CHAN or RULES changes shape in a way that would
+     invalidate old golden files or historical results. */
+  var PARSER_VERSION = "1.0.0";
+
   /* ==========================================================
      CHANNEL SPEC
      Each canonical channel lists header patterns in priority
@@ -68,6 +72,9 @@
     { k: "alt",    nm: "Altitude",            unit: "m",    grp: "gps",
       pats: [/altitude/, /^alt$/, /elevation/] }
   ];
+
+  /* Derived rather than hand-listed, so it can never drift from CHAN. */
+  var PID_PROFILE = CHAN.map(function (c) { return c.k; });
 
   /* AFR columns are read into lambda; the M54 is gasoline, so 14.7 is exact. */
   var AFR_PATS = [/air ?[\/ ]?fuel ratio/, /^afr/];
@@ -258,6 +265,7 @@
       name: name, isSample: !!isSample,
       head: head, normed: normed, raw: raw, numeric: numeric, n: n,
       mapping: mapping, autoMap: autoMap, afrCols: afrCols,
+      parserVersion: PARSER_VERSION, pidProfile: PID_PROFILE,
       report: {
         delim: delim === "\t" ? "tab" : delim, headerLine: hIdx + 1, columns: nCol,
         rows: n, skipped: skipped, ragged: ragged, decComma: decComma,

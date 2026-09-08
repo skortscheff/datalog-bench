@@ -4,7 +4,7 @@
   function merX(lon) { return (lon + 180) / 360; }
   function merY(lat) { var s = Math.sin(lat * Math.PI / 180); return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI); }
   var EARTH_CIRC = 40075016.686;
-  var TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  var TILE_URL = "__TILE_BASE__";
   var TILE_ATTR = "Imagery © Esri, Maxar, Earthstar Geographics";
   var SAT = true, TILE_FAIL = false, tileFellBack = false;
   try { if (localStorage.getItem("dlb-basemap") === "clean") SAT = false; } catch (e) {}

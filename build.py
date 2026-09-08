@@ -29,9 +29,12 @@ PARTS = [
 ]
 
 SAMPLE_TOKEN = "/*__SAMPLE_CSV__*/"
+TILE_TOKEN = "__TILE_BASE__"
+DEFAULT_TILE_BASE = ("https://server.arcgisonline.com/ArcGIS/rest/services/"
+                      "World_Imagery/MapServer/tile/{z}/{y}/{x}")
 
 
-def build(src_dir, sample_path, out_path, check_only=False):
+def build(src_dir, sample_path, out_path, check_only=False, tile_base=DEFAULT_TILE_BASE):
     missing = [p for p in PARTS if not os.path.isfile(os.path.join(src_dir, p))]
     if missing:
         sys.exit("missing source part(s) in %s: %s" % (src_dir, ", ".join(missing)))
@@ -53,6 +56,10 @@ def build(src_dir, sample_path, out_path, check_only=False):
         sys.exit("sample log contains '</script' and would break out of its element")
 
     doc = doc.replace(SAMPLE_TOKEN, sample)
+
+    if TILE_TOKEN not in doc:
+        sys.exit("tile-base placeholder %s not found in 05-map.js" % TILE_TOKEN)
+    doc = doc.replace(TILE_TOKEN, tile_base)
 
     # --- structural checks: cheap, and they catch the failures that matter ---
     problems = []
@@ -118,8 +125,11 @@ def main():
     ap.add_argument("--out", default=os.path.join(HERE, "dist", "Datalog-Bench.html"),
                     help="output HTML file")
     ap.add_argument("--check", action="store_true", help="validate only, write nothing")
+    ap.add_argument("--tile-base", default=DEFAULT_TILE_BASE,
+                    help="tile URL template substituted for %s in 05-map.js "
+                         "(default: the current Esri World Imagery URL)" % TILE_TOKEN)
     a = ap.parse_args()
-    return build(a.src, a.sample, a.out, a.check)
+    return build(a.src, a.sample, a.out, a.check, a.tile_base)
 
 
 if __name__ == "__main__":
