@@ -45,11 +45,16 @@ works on a workstation and inside a container build stage. Override with
 
 - a source part is missing
 - the sample placeholder is absent, or the sample contains `</script`
+- the `__TILE_BASE__` placeholder is missing from `05-map.js`
 - there are not exactly two `<script>` elements
 - there is no `<title>`
 - the document authors `<!doctype>`, `<html>`, `<body>` or `</head>`
   (the artifact host supplies those; authoring them breaks the page)
 - HTML elements are unbalanced or unclosed
+- the assembled `<script>` fails `node --check` — added after a mismatched
+  quote in one function corrupted the rest of the script's parsing and shipped
+  past every other check, since none of them touch the DOM-facing files
+  (`04-render.js`/`05-map.js`/`06-shell.js`) that Gate 5 deliberately excludes
 
 This is a structural gate, not a test suite. `test/run.mjs` is the behavioural
 suite Phase 1 Gate 5 called for — fixture-driven, golden output per fixture,
@@ -89,8 +94,16 @@ services from the project root:
   with a SHA-256 content hash for duplicate detection. `/data` is a named
   volume — the one thing in this stack meant to survive a container recreate.
   Reached through `web`'s `/api/` location for the same same-origin reason as
-  `tiles`.
+  `tiles`. Has its own test suite (`test/db.test.mjs`, `npm run test:db`),
+  gating its own image's build the same way.
 
 This means the app's claim of pure client-side analysis no longer holds when
 served through this stack: every opened log is also persisted server-side.
 The dropzone copy and page footer say so.
+
+The **History** panel (button in the app bar) lists everything `db` has saved
+and reopens any of them. Checking two to four saved sessions and clicking
+**Compare selected** opens a side-by-side table of idle/driving trim per bank,
+closed-loop share, peak coolant/intake air, module voltage, and a rule-by-rule
+findings grid — computed with the exact same rule engine the single-log view
+uses, not a second implementation.
