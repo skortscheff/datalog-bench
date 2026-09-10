@@ -111,8 +111,19 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === "GET" && url.pathname === "/logs") {
       const rows = db.prepare(
-        "SELECT id,name,uploaded_at,rows,session_start,headline,severity FROM logs ORDER BY uploaded_at DESC"
+        "SELECT id,name,uploaded_at,rows,session_start,headline,severity FROM logs"
       ).all();
+      // Sort by the drive's own recorded start time, not upload order — a log
+      // opened out of sequence (re-adding an older fixture, backfilling a
+      // missed session) should still land in its real chronological spot.
+      // session_start is the CSV's raw "StartTime" text (e.g. "09/10/2026
+      // 08:55:27.7171 AM"); Date parses that directly. Fall back to
+      // uploaded_at when it's missing or unparseable.
+      function sortKey(r) {
+        const t = r.session_start ? Date.parse(r.session_start) : NaN;
+        return Number.isNaN(t) ? Date.parse(r.uploaded_at) : t;
+      }
+      rows.sort((a, b) => sortKey(b) - sortKey(a));
       return send(res, 200, rows.map(rowOut));
     }
 

@@ -105,3 +105,16 @@ test("unparseable content is rejected, not silently stored", async () => {
   const list = await req("GET", "/logs");
   assert.equal(list.body.length, 1); // still just the one good upload
 });
+
+test("list is ordered by the drive's own recorded start time, not upload order", async () => {
+  // sample-session.csv (uploaded before either of these) sits between them
+  // chronologically, so a plain upload-order sort would misplace it.
+  const newer = readFileSync(path.join(ROOT, "fixtures", "CSVLog_20260909_091057.csv"), "utf8"); // 2026-09-09
+  const older = readFileSync(path.join(ROOT, "fixtures", "CSVLog_20260907_170504.csv"), "utf8"); // 2026-09-07
+  await req("POST", "/logs", { name: "newer.csv", text: newer }); // uploaded first
+  await req("POST", "/logs", { name: "older.csv", text: older }); // uploaded second, but drove earlier
+  const list = await req("GET", "/logs");
+  const names = list.body.map((r) => r.name);
+  assert.ok(names.indexOf("newer.csv") < names.indexOf("older.csv"),
+    "the 09/09 drive should list above the 09/07 drive even though it was uploaded first");
+});
