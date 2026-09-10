@@ -54,6 +54,12 @@
       "h": "Lean gets worse the less air the engine is moving"
     },
     {
+      "id": "rich-excursion",
+      "sev": "warning",
+      "tag": "Fuel trim",
+      "h": "Worst rich excursion: -22.7 %"
+    },
+    {
       "id": "trim-level",
       "sev": "neutral",
       "tag": "Fuel trim",
@@ -94,6 +100,12 @@
       "sev": "good",
       "tag": "Log quality",
       "h": "Clean capture at 1.00 s per frame"
+    },
+    {
+      "id": "gps-precision",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "GPS fixes are full precision"
     }
   ]
 }

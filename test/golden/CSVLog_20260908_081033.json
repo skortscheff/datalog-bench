@@ -78,6 +78,12 @@
       "h": "8 frames where engine speed outruns road speed"
     },
     {
+      "id": "rich-excursion",
+      "sev": "neutral",
+      "tag": "Fuel trim",
+      "h": "Worst rich excursion: -9.4 %"
+    },
+    {
       "id": "coverage",
       "sev": "neutral",
       "tag": "Coverage",
@@ -94,6 +100,12 @@
       "sev": "good",
       "tag": "Cooling",
       "h": "Coolant temperature stayed normal"
+    },
+    {
+      "id": "gps-precision",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "GPS fixes are full precision"
     }
   ]
 }

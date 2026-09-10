@@ -60,6 +60,12 @@
       "h": "1 sampling gap in the capture"
     },
     {
+      "id": "rich-excursion",
+      "sev": "warning",
+      "tag": "Fuel trim",
+      "h": "Worst rich excursion: -23.4 %"
+    },
+    {
       "id": "load-dep",
       "sev": "neutral",
       "tag": "Load dependence",
@@ -94,6 +100,12 @@
       "sev": "good",
       "tag": "Cooling",
       "h": "Coolant temperature stayed normal"
+    },
+    {
+      "id": "gps-precision",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "GPS fixes are full precision"
     }
   ]
 }

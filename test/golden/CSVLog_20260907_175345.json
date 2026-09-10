@@ -82,6 +82,18 @@
       "sev": "good",
       "tag": "Log quality",
       "h": "Clean capture at 3.61 s per frame"
+    },
+    {
+      "id": "rich-excursion",
+      "sev": "good",
+      "tag": "Fuel trim",
+      "h": "No rich excursion of note"
+    },
+    {
+      "id": "gps-precision",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "GPS fixes are full precision"
     }
   ]
 }

@@ -60,6 +60,12 @@
       "h": "45 frames where engine speed outruns road speed"
     },
     {
+      "id": "rich-excursion",
+      "sev": "neutral",
+      "tag": "Fuel trim",
+      "h": "Worst rich excursion: -17.2 %"
+    },
+    {
       "id": "coverage",
       "sev": "neutral",
       "tag": "Coverage",
@@ -94,6 +100,12 @@
       "sev": "good",
       "tag": "Log quality",
       "h": "Clean capture at 1.00 s per frame"
+    },
+    {
+      "id": "gps-precision",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "GPS fixes are full precision"
     }
   ]
 }

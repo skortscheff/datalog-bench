@@ -337,6 +337,101 @@
           ev: [["worst ratio", n1(w.r, 0) + ":1"], ["median", n1(p50, 0) + ":1"], ["frames", String(odd.length)]] };
       } },
 
+    /* ---------------- worst rich excursion ---------------- */
+    { id: "rich-excursion", need: ["tt1"],
+      run: function (x) {
+        var idx = x.trimFrames;
+        if (idx.length < 12) return null;
+        function bankMin(i) {
+          var v1 = x.C.tt1[i], v2 = x.have.tt2 ? x.C.tt2[i] : null;
+          if (v1 == null && v2 == null) return null;
+          if (v1 == null) return v2;
+          if (v2 == null) return v1;
+          return Math.min(v1, v2);
+        }
+        var worstVal = null, worstPos = -1, k, v;
+        for (k = 0; k < idx.length; k++) {
+          v = bankMin(idx[k]);
+          if (v != null && isFinite(v) && (worstVal == null || v < worstVal)) { worstVal = v; worstPos = k; }
+        }
+        if (worstVal == null || worstVal > -8) return { sev: "good", tag: "Fuel trim",
+          h: "No rich excursion of note",
+          p: "The most negative moment across " + idx.length + " " + x.trimLabel + " frames is " + sg(worstVal, 1) +
+             " %, not worth flagging on its own.",
+          ev: [["worst", sg(worstVal, 1) + " %"]] };
+
+        /* how long the correction stayed at least half this deep, as a rough
+           excursion window rather than a single noisy frame */
+        var thr = Math.min(-8, worstVal / 2), lo = worstPos, hi = worstPos, vv;
+        while (lo > 0) { vv = bankMin(idx[lo - 1]); if (vv != null && vv <= thr) lo--; else break; }
+        while (hi < idx.length - 1) { vv = bankMin(idx[hi + 1]); if (vv != null && vv <= thr) hi++; else break; }
+        var peakI = idx[worstPos], startI = idx[lo], endI = idx[hi];
+        var dur = (!x.noTime) ? (x.C.t[endI] - x.C.t[startI]) : null;
+
+        var ev = [["worst", sg(worstVal, 1) + " %"], ["frames in excursion", String(hi - lo + 1)]];
+        if (dur != null) ev.push(["duration", n1(Math.max(dur, 0), 0) + " s"]);
+        if (!x.noTime) ev.push(["at", Math.round(x.C.t[peakI]) + " s"]);
+        if (x.have.tps) ev.push(["throttle then", n1(x.C.tps[peakI], 0) + " %"]);
+        if (x.have.rpm) ev.push(["rpm then", n1(x.C.rpm[peakI], 0)]);
+        if (x.have.iat) ev.push(["IAT then", n1(x.C.iat[peakI], 0) + " °C"]);
+
+        /* capped at "warning", never "critical" — this is a single worst-moment
+           snapshot, not a session verdict, and the narrative below explicitly
+           says so; a "critical" severity here would contradict that. */
+        var mag = Math.abs(worstVal);
+        var sev = mag >= 20 ? "warning" : "neutral";
+        return { sev: sev, tag: "Fuel trim",
+          h: "Worst rich excursion: " + sg(worstVal, 1) + " %" + (dur != null && dur >= 5 ? ", sustained " + n1(dur, 0) + " s" : ""),
+          p: "The deepest rich correction in this log is " + sg(worstVal, 1) + " %" +
+             (!x.noTime ? ", at " + Math.round(x.C.t[peakI]) + " s in" : "") +
+             (x.have.tps ? " (throttle " + n1(x.C.tps[peakI], 0) + " %" : "") +
+             (x.have.rpm ? (x.have.tps ? ", " : " (") + n1(x.C.rpm[peakI], 0) + " rpm" : "") +
+             (x.have.tps || x.have.rpm ? ")" : "") +
+             (dur != null && dur >= 5 ? ". Trim stayed at least half this deep for " + n1(dur, 0) + " s (" + (hi - lo + 1) + " frames) around that point" : "") +
+             ". A single deep frame like this is usually a transient — an acceleration enrichment spike, a decel-fuel-cutoff re-entry, a cold-start or EVAP-purge event settling out — rather than a fixed fault; the trim-level and load-dependence findings above are the ones to trust for a sustained problem.",
+          ev: ev };
+      } },
+
+    /* ---------------- GPS fix precision ---------------- */
+    { id: "gps-precision", need: ["lat", "lon"],
+      run: function (x) {
+        var idx = [], i;
+        for (i = 0; i < x.n; i++) if (x.C.lat[i] != null && x.C.lat[i] !== 0 && x.C.lon[i] != null && x.C.lon[i] !== 0) idx.push(i);
+        if (idx.length < 20) return null;
+
+        function quantFrac(col, step) {
+          var n = 0, snapped = 0, k, v, scaled;
+          for (k = 0; k < idx.length; k++) {
+            v = col[idx[k]];
+            if (v == null) continue;
+            n++;
+            scaled = v / step;
+            if (Math.abs(scaled - Math.round(scaled)) < 1e-6) snapped++;
+          }
+          return n ? snapped / n : 0;
+        }
+        var latFrac = quantFrac(x.C.lat, 0.01), lonFrac = quantFrac(x.C.lon, 0.01);
+        var distinctLat = {}, distinctLon = {}, k2;
+        for (k2 = 0; k2 < idx.length; k2++) { distinctLat[x.C.lat[idx[k2]]] = 1; distinctLon[x.C.lon[idx[k2]]] = 1; }
+        var nLat = Object.keys(distinctLat).length, nLon = Object.keys(distinctLon).length;
+        var ev = [["fixes", String(idx.length)], ["distinct latitudes", String(nLat)], ["distinct longitudes", String(nLon)]];
+
+        if (latFrac >= 0.9 && lonFrac >= 0.9) {
+          return { sev: "warning", tag: "Log quality",
+            h: "GPS is rounded to about 1 km, not a real track",
+            p: "This log's " + idx.length + " GPS fixes take only " + nLat + " distinct latitude and " + nLon +
+               " distinct longitude values, snapped to a 0.01° (roughly 1.1 km) grid instead of the usual six-decimal, sub-10-metre fixes. " +
+               "The map will draw a blocky, zig-zagging route instead of the real one, and anything computed from GPS position or speed is unusable for this log — treat it as missing, not just imprecise. " +
+               "This is a logger-side issue, not this app: on a phone it is usually the OBD app's location permission having dropped from full/precise to approximate. Check that setting before your next drive.",
+            ev: ev };
+        }
+        return { sev: "good", tag: "Log quality",
+          h: "GPS fixes are full precision",
+          p: "Latitude and longitude carry " + nLat + " and " + nLon + " distinct values across " + idx.length +
+             " fixes — real track resolution, so the map and any GPS-derived checks can be trusted for this log.",
+          ev: ev };
+      } },
+
     /* ---------------- channel coverage ---------------- */
     { id: "coverage", need: [],
       run: function (x) {
