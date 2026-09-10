@@ -1,0 +1,99 @@
+{
+  "error": null,
+  "have": {
+    "t": true,
+    "rpm": true,
+    "vss": true,
+    "load": true,
+    "tps": true,
+    "maf": true,
+    "spark": true,
+    "ect": true,
+    "iat": true,
+    "stft1": true,
+    "ltft1": true,
+    "stft2": true,
+    "ltft2": true,
+    "lam1": true,
+    "lam2": true,
+    "o2b1s2": true,
+    "o2b2s2": true,
+    "fs1": true,
+    "lat": true,
+    "lon": true,
+    "alt": true,
+    "tt1": true,
+    "tt2": true,
+    "lean": true,
+    "dt": true
+  },
+  "report": {
+    "delim": ",",
+    "headerLine": 2,
+    "columns": 26,
+    "rows": 1177,
+    "skipped": 0,
+    "ragged": 0,
+    "decComma": false,
+    "preamble": [
+      "# StartTime = 09/09/2026 11:52:49.7104 AM"
+    ],
+    "warnings": []
+  },
+  "findings": [
+    {
+      "id": "cat",
+      "sev": "serious",
+      "tag": "Catalyst",
+      "h": "Post-catalyst sensors are swinging"
+    },
+    {
+      "id": "load-dep",
+      "sev": "warning",
+      "tag": "Load dependence",
+      "h": "Lean gets worse the less air the engine is moving"
+    },
+    {
+      "id": "ratio",
+      "sev": "neutral",
+      "tag": "Driveline",
+      "h": "45 frames where engine speed outruns road speed"
+    },
+    {
+      "id": "coverage",
+      "sev": "neutral",
+      "tag": "Coverage",
+      "h": "1 diagnostic channel missing from this log"
+    },
+    {
+      "id": "trim-level",
+      "sev": "good",
+      "tag": "Fuel trim",
+      "h": "Fuel trims sit inside the ECU's comfortable range"
+    },
+    {
+      "id": "bank-balance",
+      "sev": "good",
+      "tag": "Bank balance",
+      "h": "Both banks are corrected by the same amount"
+    },
+    {
+      "id": "iat",
+      "sev": "good",
+      "tag": "Intake air",
+      "h": "Intake air stays cool"
+    },
+    {
+      "id": "ect",
+      "sev": "good",
+      "tag": "Cooling",
+      "h": "Coolant temperature stayed normal"
+    },
+    {
+      "id": "gaps",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "Clean capture at 1.00 s per frame"
+    }
+  ]
+}

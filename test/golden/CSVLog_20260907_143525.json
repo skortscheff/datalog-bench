@@ -54,9 +54,9 @@
     },
     {
       "id": "load-dep",
-      "sev": "neutral",
+      "sev": "warning",
       "tag": "Load dependence",
-      "h": "Correction is flat across load"
+      "h": "Lean gets worse the less air the engine is moving"
     },
     {
       "id": "iat",

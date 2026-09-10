@@ -408,17 +408,25 @@
     for (var e = 1; e < n; e++) dt[e] = C.t[e] - C.t[e - 1];
     C.dt = dt;
 
-    /* ---- operating state, using whatever channels exist ---- */
+    /* ---- operating state, using whatever channels exist ----
+     * "idle" means closed throttle, at any road speed (coasting counts) — not
+     * just stopped. The 2026-09-09 heat-soak/low-airflow trim pattern shows up
+     * identically while coasting at speed as it does standing still, so a
+     * stopped-only definition mis-buckets those frames into "driving" and
+     * dilutes the idle-vs-driving comparison. Fall back to the old vss/rpm
+     * based split only when there's no throttle channel to key off of. */
     var st = new Array(n);
     var hasEct = !!C.ect, hasVss = !!C.vss, hasRpm = !!C.rpm, hasTps = !!C.tps;
     for (var g = 0; g < n; g++) {
       var warmv = hasEct ? (C.ect[g] > 70) : true;
-      var moving = hasVss ? (C.vss[g] > 5) : (hasRpm ? C.rpm[g] > 1600 : false);
-      var stopped = hasVss ? (C.vss[g] === 0) : (hasRpm ? C.rpm[g] > 0 && C.rpm[g] < 1200 : false);
       var running = hasRpm ? C.rpm[g] > 300 : true;
+      var closedThrottle = hasTps ? (C.tps[g] < 15) :
+        (hasVss ? C.vss[g] === 0 : (hasRpm ? C.rpm[g] > 0 && C.rpm[g] < 1200 : false));
+      var openThrottle = hasTps ? (C.tps[g] >= 15) :
+        (hasVss ? C.vss[g] > 5 : (hasRpm ? C.rpm[g] > 1600 : false));
       if (hasEct && !warmv && running) st[g] = "warmup";
-      else if (warmv && stopped && running && (!hasTps || C.tps[g] < 15)) st[g] = "idle";
-      else if (warmv && moving) st[g] = "driving";
+      else if (warmv && running && closedThrottle) st[g] = "idle";
+      else if (warmv && running && openThrottle) st[g] = "driving";
       else st[g] = "other";
     }
 

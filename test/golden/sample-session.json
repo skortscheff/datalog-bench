@@ -54,16 +54,16 @@
       "h": "Engine running lean, ECU adding fuel to compensate"
     },
     {
+      "id": "load-dep",
+      "sev": "warning",
+      "tag": "Load dependence",
+      "h": "Lean gets worse the less air the engine is moving"
+    },
+    {
       "id": "gaps",
       "sev": "warning",
       "tag": "Log quality",
       "h": "14 sampling gaps in the capture"
-    },
-    {
-      "id": "load-dep",
-      "sev": "neutral",
-      "tag": "Load dependence",
-      "h": "Correction is flat across load"
     },
     {
       "id": "iat",

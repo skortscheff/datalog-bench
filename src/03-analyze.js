@@ -37,6 +37,16 @@
     for (i = 0; i < idx.length; i++) { v = col[idx[i]]; if (v != null && isFinite(v) && (b == null || v > b)) b = v; }
     return b;
   }
+  function corr(a, b) {
+    var xs = [], ys = [], i;
+    for (i = 0; i < a.length && i < b.length; i++) if (a[i] != null && b[i] != null && isFinite(a[i]) && isFinite(b[i])) { xs.push(a[i]); ys.push(b[i]); }
+    if (xs.length < 5) return null;
+    var mx = 0, my = 0; for (i = 0; i < xs.length; i++) { mx += xs[i]; my += ys[i]; }
+    mx /= xs.length; my /= ys.length;
+    var cov = 0, sx = 0, sy = 0;
+    for (i = 0; i < xs.length; i++) { var dx = xs[i] - mx, dy = ys[i] - my; cov += dx * dy; sx += dx * dx; sy += dy * dy; }
+    return (sx && sy) ? cov / Math.sqrt(sx * sy) : null;
+  }
   function n1(v, d) { return v == null ? "—" : v.toFixed(d == null ? 1 : d); }
   function sg(v, d) { return v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(d == null ? 1 : d); }
 
@@ -122,11 +132,39 @@
           p: "Trim at idle (" + sg(mi) + " %) and while driving (" + sg(md) + " %) are within " + n1(Math.abs(d)) +
              " % of each other, so the error scales with airflow rather than being additive. That points away from a fixed-size vacuum leak and toward a sensor calibration or fuel-pressure offset.",
           ev: ev };
-        if (d > 0) return { sev: "warning", tag: "Load dependence",
-          h: "Lean gets worse the less air the engine is moving",
-          p: "Trim runs " + sg(mi) + " % at idle against " + sg(md) + " % while driving — " + n1(d) +
-             " % worse at low airflow. That is the signature of a fixed leak of unmetered air: at idle it is a large fraction of total flow, under load it is diluted. Smoke-test the intake tract after the mass-air sensor, the PCV system, and every vacuum line before touching the fuel side.",
-          ev: ev };
+        if (d > 0) {
+          var idleIat = x.have.iat && idle.length > 8 ? med(at(x.C.iat, idle)) : null;
+          var iatTrimR = x.have.iat ? corr(at(x.C.iat, idle), at(x.C.tt1, idle)) : null;
+          var heatSoak = idleIat != null && idleIat >= 55 && iatTrimR != null && iatTrimR >= 0.3;
+          if (heatSoak) {
+            ev = ev.concat([["idle IAT median", n1(idleIat, 0) + " °C"], ["IAT-vs-trim r", n1(iatTrimR, 2)]]);
+            return { sev: "neutral", tag: "Load dependence",
+              h: "Lean at idle tracks intake air heat, not just load",
+              p: "Trim runs " + sg(mi) + " % at idle against " + sg(md) + " % while driving — " + n1(d) +
+                 " % worse at low airflow, which usually reads as a fixed unmetered-air leak. But idle intake air here runs hot (median " +
+                 n1(idleIat, 0) + " °C) and trim rises with it within the idle frames themselves (r=" + n1(iatTrimR, 2) +
+                 "), so heat soak is at least as likely a cause as a leak: hot, less-dense air read at idle can look like a metering shortfall without any leak at all. Check whether this trend holds at lower idle IAT (e.g. right after startup) before smoke-testing the intake.",
+              ev: ev };
+          }
+          return { sev: "warning", tag: "Load dependence",
+            h: "Lean gets worse the less air the engine is moving",
+            p: "Trim runs " + sg(mi) + " % at idle against " + sg(md) + " % while driving — " + n1(d) +
+               " % worse at low airflow. That is the signature of a fixed leak of unmetered air: at idle it is a large fraction of total flow, under load it is diluted. Smoke-test the intake tract after the mass-air sensor, the PCV system, and every vacuum line before touching the fuel side.",
+            ev: ev };
+        }
+        var idleIat2 = x.have.iat && idle.length > 8 ? med(at(x.C.iat, idle)) : null;
+        var iatTrimR2 = x.have.iat ? corr(at(x.C.iat, idle), at(x.C.tt1, idle)) : null;
+        var heatSoak2 = idleIat2 != null && idleIat2 >= 55 && iatTrimR2 != null && iatTrimR2 >= 0.3;
+        if (heatSoak2) {
+          ev = ev.concat([["idle IAT median", n1(idleIat2, 0) + " °C"], ["IAT-vs-trim r", n1(iatTrimR2, 2)]]);
+          return { sev: "neutral", tag: "Load dependence",
+            h: "Rich at idle tracks intake air heat, not a load-capacity problem",
+            p: "Trim runs " + sg(mi) + " % at idle against " + sg(md) + " % while driving — " + n1(-d) +
+               " % richer at low airflow, which can look like injector leakage or fuel pressure running high. But idle intake air here runs hot (median " +
+               n1(idleIat2, 0) + " °C) and trim rises toward zero with it within the idle frames themselves (r=" + n1(iatTrimR2, 2) +
+               "), the same heat-soak signature seen on lean-idle logs, just starting from a rich baseline. That's consistent with a transient (cold start, EVAP purge) decaying over the drive rather than a fixed delivery fault — check whether this eases within the first 20-30 minutes and is gone on a later same-day drive before chasing injectors or fuel pressure.",
+            ev: ev };
+        }
         return { sev: "warning", tag: "Load dependence",
           h: "Lean gets worse as airflow rises",
           p: "Trim runs " + sg(md) + " % while driving against " + sg(mi) + " % at idle — " + n1(-d) +
