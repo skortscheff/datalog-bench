@@ -104,15 +104,23 @@
 
     if (spec.kind === "bar") {
       var bw = Math.max(1, Math.min(5, iw / Math.max(VIEW.length, 1) - 2));
+      /* one bar per pixel column at most: keep the tallest value in each, so a
+         long log does not create one DOM node per frame on every redraw */
+      var bars = [], bcol = {};
       for (j = 0; j < VIEW.length; j++) {
         v = C[spec.series[0].k][VIEW[j]];
         if (v == null || !isFinite(v)) continue;
-        svg.appendChild(svgEl("rect", {
-          x: xt(C.t[VIEW[j]]) - bw / 2, y: yv(v), width: bw, height: Math.max(1, PAD.t + ih - yv(v)),
-          rx: Math.min(2, bw / 2),
-          fill: (spec.flagAbove != null && v > spec.flagAbove) ? "var(--serious)" : SC[spec.series[0].color]
-        }));
+        var bx = xt(C.t[VIEW[j]]), key = VIEW.length > iw ? Math.round(bx) : j;
+        if (bcol[key] != null) { if (v > bars[bcol[key]].v) bars[bcol[key]].v = v; continue; }
+        bcol[key] = bars.length; bars.push({ x: bx, v: v });
       }
+      bars.forEach(function (b) {
+        svg.appendChild(svgEl("rect", {
+          x: b.x - bw / 2, y: yv(b.v), width: bw, height: Math.max(1, PAD.t + ih - yv(b.v)),
+          rx: Math.min(2, bw / 2),
+          fill: (spec.flagAbove != null && b.v > spec.flagAbove) ? "var(--serious)" : SC[spec.series[0].color]
+        }));
+      });
     } else if (VIEW.length > iw * 2) {
       /* dense log: one min/max column per pixel keeps every spike instead of
          throwing them away the way stride sampling would */
@@ -319,7 +327,7 @@
     if (HAVE.lam1) r.push(["λ", function (i) { return fmt(C.lam1[i], 3); }]);
     add("spark", "Advance", "°", 1);
     add("volt", "Voltage", "V", 2);
-    if (HAVE.fs1) r.push(["Fuel sys", function (i) { return FS_NAMES[C.fs1[i]] || String(C.fs1[i]); }]);
+    if (HAVE.fs1) r.push(["Fuel sys", function (i) { return C.fs1[i] == null ? "—" : (FS_NAMES[C.fs1[i]] || String(C.fs1[i])); }]);
     r.push(["State", function (i) { return ST[i] === "other" ? "transition" : ST[i]; }]);
     READ = r;
     var host = document.getElementById("readout");

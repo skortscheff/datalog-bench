@@ -1,8 +1,11 @@
+# Base images are pinned by tag only. For fully reproducible builds, pin them
+# by digest too (e.g. node:24-slim@sha256:<digest>) and update on a schedule.
+#
 # --- stage 1: build + test gate ---
 # Node and Python together in one stage: build.py and the Gate 5 suite both run
 # fast against the same src/ + fixtures/ tree, with no compiled artifact passing
 # between separate stages that would benefit from being split further.
-FROM node:20-slim AS build
+FROM node:24-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
@@ -18,6 +21,7 @@ RUN adduser -D -H -u 10001 appuser \
     && chown -R appuser:appuser /usr/share/nginx/html /var/cache/nginx /var/run /var/log/nginx
 COPY --from=build /out/Datalog-Bench.html /usr/share/nginx/html/index.html
 COPY docker/nginx-web.conf /etc/nginx/conf.d/default.conf
+COPY docker/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --chown=appuser:appuser docker/healthz.json /usr/share/nginx/html/healthz
 COPY --chown=appuser:appuser docker/readyz.json  /usr/share/nginx/html/readyz
 USER appuser

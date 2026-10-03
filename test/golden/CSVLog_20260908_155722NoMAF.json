@@ -19,9 +19,6 @@
     "o2b1s2": true,
     "o2b2s2": true,
     "fs1": true,
-    "lat": true,
-    "lon": true,
-    "alt": true,
     "tt1": true,
     "tt2": true,
     "lean": true,
@@ -30,7 +27,7 @@
   "report": {
     "delim": ",",
     "headerLine": 2,
-    "columns": 28,
+    "columns": 25,
     "rows": 1028,
     "skipped": 0,
     "ragged": 0,
@@ -100,12 +97,6 @@
       "sev": "good",
       "tag": "Log quality",
       "h": "Clean capture at 1.00 s per frame"
-    },
-    {
-      "id": "gps-precision",
-      "sev": "good",
-      "tag": "Log quality",
-      "h": "GPS fixes are full precision"
     }
   ],
   "metrics": {
@@ -120,6 +111,10 @@
       {
         "id": "volt",
         "missing": "volt"
+      },
+      {
+        "id": "gps-precision",
+        "missing": "lat"
       }
     ]
   }

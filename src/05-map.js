@@ -6,8 +6,10 @@
   var EARTH_CIRC = 40075016.686;
   var TILE_URL = "__TILE_BASE__";
   var TILE_ATTR = "Imagery © Esri, Maxar, Earthstar Geographics";
-  var SAT = true, TILE_FAIL = false, tileFellBack = false;
-  try { if (localStorage.getItem("dlb-basemap") === "clean") SAT = false; } catch (e) {}
+  /* Satellite is opt-in: it requests imagery for the route's area from Esri
+     (through this server's tile proxy), so it stays off until chosen. */
+  var SAT = false, TILE_FAIL = false, tileErr = 0, tileOk = 0;
+  try { if (localStorage.getItem("dlb-basemap") === "sat") SAT = true; } catch (e) {}
 
   var EVENT_DEFS = [
     { id: "rpm",  nm: "Peak engine speed",    col: "rpm",  dp: 0, unit: "RPM" },
@@ -96,7 +98,7 @@
       var b = document.createElement("button");
       b.type = "button"; b.textContent = o[1];
       b.setAttribute("aria-pressed", String((o[0] === "sat") === (SAT && !TILE_FAIL)));
-      if (o[0] === "sat" && TILE_FAIL) { b.disabled = true; b.title = "Imagery can't load here — this viewer blocks external tiles"; }
+      if (o[0] === "sat" && TILE_FAIL) { b.disabled = true; b.title = "Imagery could not be loaded here"; }
       b.addEventListener("click", function () {
         SAT = (o[0] === "sat");
         try { localStorage.setItem("dlb-basemap", SAT ? "sat" : "clean"); } catch (e2) {}
@@ -161,7 +163,7 @@
       var v0 = Math.max(0, vAt(0)), v1 = Math.min(1, vAt(plotH));
       var z = Math.max(3, Math.min(18, Math.round(Math.log(scale / 160) / Math.LN2)));
       var n2, tx0, tx1, ty0, ty1, count;
-      while (true) {
+      for (var guard = 0; guard < 30; guard++) {
         n2 = Math.pow(2, z);
         tx0 = Math.floor(u0 * n2); tx1 = Math.floor(u1 * n2);
         ty0 = Math.floor(v0 * n2); ty1 = Math.floor(v1 * n2);
@@ -179,10 +181,13 @@
           img.style.top    = ((oy + (ty / n2 - ny0) * scale) / plotH * 100) + "%";
           img.style.width  = (tPx / w * 100) + "%";
           img.style.height = (tPx / plotH * 100) + "%";
-          /* a blocked or missing tile fires error — fall back to vector, once */
+          /* a few missing tiles (edge of coverage) are normal; fall back to the
+             vector trace only when several fail and none have loaded */
+          img.addEventListener("load", function () { tileOk++; });
           img.addEventListener("error", function () {
-            if (tileFellBack) return;
-            tileFellBack = true; TILE_FAIL = true;
+            tileErr++;
+            if (TILE_FAIL || tileOk > 0 || tileErr < 3) return;
+            TILE_FAIL = true;
             setTimeout(refresh, 0);
           });
           img.src = TILE_URL.replace("{z}", z).replace("{y}", ty).replace("{x}", tx);
@@ -336,8 +341,8 @@
       (laMax >= 0 ? "N" : "S") + " " + Math.abs(loMin).toFixed(3) + "&#8239;" + (loMin >= 0 ? "E" : "W") + "." +
       (nulls ? " " + nulls + " frame" + (nulls > 1 ? "s" : "") + " had no GPS fix." : "") +
       " Pin positions are the logged fix nearest that frame. " +
-      (sat ? "Basemap is Esri World Imagery, requested live at zoom&#8239;" + zUsed + " and registered in Web Mercator."
-           : TILE_FAIL ? "<b>Satellite imagery is unavailable here</b> &mdash; this viewer blocks external map tiles, so the map fell back to the vector trace. Open this file directly in a browser and the imagery loads."
+      (sat ? "Basemap is Esri World Imagery, requested live at zoom&#8239;" + zUsed + " and registered in Web Mercator. The area of this route is visible to Esri in those tile requests."
+           : TILE_FAIL ? "<b>Satellite imagery could not be loaded</b> &mdash; the tile service is unreachable from here, so the map fell back to the vector trace."
                        : "Vector basemap; switch to Satellite above for imagery.");
 
     return function paintMapHover(q) {

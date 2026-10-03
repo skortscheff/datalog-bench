@@ -1,0 +1,13 @@
+.git
+.github
+dist
+node_modules
+__pycache__
+*.pyc
+# CSVs outside fixtures/ (personal logs, scratch output). fixtures/*.csv stays:
+# test/run.mjs reads every one of them and build.py needs sample-session.csv.
+/*.csv
+logs/
+fixtures/synthetic
+*.png
+test/.tmp-*

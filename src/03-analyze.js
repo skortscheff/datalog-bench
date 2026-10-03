@@ -83,7 +83,7 @@
         if (m2 != null) {
           sym = Math.abs(m1 - m2) < 5
             ? " Both banks move together within " + n1(Math.abs(m1 - m2)) + " %, which puts the cause upstream of the intake split or in the fuel supply rather than in one bank's injectors or sensors."
-            : " The two banks differ by " + n1(Math.abs(m1 - m2)) + " %, so part of this is bank-specific — see the bank balance finding.";
+            : " The two banks differ by " + n1(Math.abs(m1 - m2)) + " %, so part of this is bank-specific — see the bank balance check.";
         }
         return { sev: sev, tag: "Fuel trim",
           h: lean ? "Engine running lean, ECU adding fuel to compensate"
@@ -208,7 +208,9 @@
         var tWarm = null;
         for (i = 0; i < x.n; i++) if (x.C.ect[i] != null && x.C.ect[i] >= 80) { tWarm = x.C.t[i]; break; }
         if (tWarm != null && !x.noTime) ev.push(["to 80 °C", Math.round(tWarm) + " s"]);
-        var sev = mx >= 112 ? "critical" : mx >= 105 ? "warning" : "good";
+        /* general-purpose limits, not sourced from BMW documentation: a healthy M54
+           runs well above 100 °C under load, so the old 105 °C line was too low */
+        var sev = mx >= 120 ? "critical" : mx >= 112 ? "warning" : "good";
         if (sev === "good") return { sev: "good", tag: "Cooling",
           h: "Coolant temperature stayed normal",
           p: "Coolant peaks at " + n1(mx, 0) + " °C" + (mdn != null ? " and holds a median of " + n1(mdn, 0) + " °C once warm" : "") +
@@ -388,7 +390,7 @@
              (x.have.rpm ? (x.have.tps ? ", " : " (") + n1(x.C.rpm[peakI], 0) + " rpm" : "") +
              (x.have.tps || x.have.rpm ? ")" : "") +
              (dur != null && dur >= 5 ? ". Trim stayed at least half this deep for " + n1(dur, 0) + " s (" + (hi - lo + 1) + " frames) around that point" : "") +
-             ". A single deep frame like this is usually a transient — an acceleration enrichment spike, a decel-fuel-cutoff re-entry, a cold-start or EVAP-purge event settling out — rather than a fixed fault; the trim-level and load-dependence findings above are the ones to trust for a sustained problem.",
+             ". A single deep frame like this is usually a transient — an acceleration enrichment spike, a decel-fuel-cutoff re-entry, a cold-start or EVAP-purge event settling out — rather than a fixed fault; the trim-level and load-dependence checks are the ones to trust for a sustained problem.",
           ev: ev };
       } },
 
@@ -444,7 +446,7 @@
         return { sev: "neutral", tag: "Coverage",
           h: miss.length + " diagnostic channel" + (miss.length > 1 ? "s" : "") + " missing from this log",
           p: "This file has no " + miss.slice(0, 4).join(", ") + (miss.length > 4 ? " and " + (miss.length - 4) + " more" : "") +
-             ", so the checks that depend on them were skipped rather than guessed at. Add those PIDs to your logger's list and the corresponding findings will appear. If a channel is present under a name the parser did not recognise, map it by hand in the Channels panel above.",
+             ", so the checks that depend on them were skipped rather than guessed at. Add those PIDs to your logger's list and the corresponding checks will run. If a channel is present under a name the parser did not recognise, map it by hand in the Channels panel above.",
           ev: [["mapped", String(Object.keys(x.have).length)], ["columns", String(x.L.head.length)]] };
       } }
   ];

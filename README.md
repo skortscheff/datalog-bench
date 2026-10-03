@@ -1,109 +1,137 @@
-# Datalog Bench — source
+# Datalog Bench
 
-Single-file OBD-II datalog analyser for the **BMW M54**, reading standard
-OBD-II / EOBD data only (OBD Fusion over an ELM327).
+A browser-based analyser for OBD-II datalogs from the BMW M54, recorded with
+OBD Fusion over an ELM327 adapter. Drop in one or more CSV logs to see fuel
+trims, engine channels and route data on a shared time axis, and keep a history
+of past sessions to compare side by side.
 
-Design document: `../Datalog-Bench-Architecture.html`
+It reads standard OBD-II / EOBD data only.
 
-## Layout
+## Features
 
-    src/                 the six numbered parts, concatenated in filename order
-      01-shell.html      tokens, component CSS, page skeleton, empty state, history panel
-      02-parse.js        channel spec, parser, unit normalisation, derived channels
-      03-analyze.js      rule registry and statistics
-      04-render.js       chart engine, panels, shared crosshair, readout
-      05-map.js          Mercator projection, tile layer, event pins
-      06-shell.js        KPIs, findings, mapping UI, file intake, history, orchestration
-    fixtures/            real logs used as the bundled sample and as test inputs
-    test/                Phase 1 Gate 5 regression suite (parser + rules + db service)
-    db/                  the "simple database service": node:http + node:sqlite API
-    docker/              nginx configs and the tiles-proxy Dockerfile
-    dist/                build output (not the published copy)
-    build.py             assembler and structural gate
-    make-test-fixtures.py  generates synthetic logs in other shapes
+- **Log intake.** Drag and drop or choose one or more CSV files. The parser
+  detects the delimiter and decimal separator, matches column headers to known
+  channels, and converts imperial units (°F, mph, lb/min, feet) to metric. A
+  built-in sample log is included.
+- **Channel mapping.** If a column is not recognised, map it to a channel by
+  hand. The parse report lists skipped lines, ragged rows and unit conversions.
+- **Summary tiles.** Median fuel trim per bank, peak coolant and intake air
+  temperature, peak engine and road speed, closed-loop share, module voltage,
+  logging gaps and frame count, limited to the channels the log has.
+- **Fuel correction charts.** Total fuel correction (STFT + LTFT) with a ±10 %
+  band, then separate long-term and short-term trim charts, each with both
+  banks.
+- **Time-aligned panels.** Every channel on one time axis with a shared
+  crosshair. Hover or use the arrow keys to step through frames; the readout
+  shows the full frame at the cursor.
+- **Window and state filters.** Drag on the timeline to select a window. Filter
+  frames by operating state: all frames, warm-up, idle or driving.
+- **Map and terrain.** For logs with GPS, the route is drawn with event markers,
+  plus an altitude profile. Satellite imagery is optional (see Privacy).
+- **Trim by operating state.** Median total correction split by warm-up, idle
+  and driving.
+- **Sample interval chart.** Shows logging gaps so you can tell which readings
+  may be artefacts of a dropped capture.
+- **Table view.** Every source column for every frame in the current window.
+- **History.** Optional and off by default. Turn on "Save opened logs" (or press
+  "Save this log") to keep sessions on the server, with duplicate detection by
+  content hash. Reopen or delete any saved session from the History panel.
+- **Compare.** Select two to four saved sessions for a side-by-side table:
+  idle and driving trim per bank, closed-loop share, peak temperatures, module
+  voltage, trim-versus-intake-air slope at warm idle, logging cadence, units,
+  and which checks each log was too sparse to run.
 
-The split is for authoring only. There is no module system at runtime — the
-build concatenates the parts and inlines `fixtures/sample-session.csv` into the
-`<script id="sample-csv">` placeholder.
+## Running it
 
-## Build
+The stack runs in Docker Compose:
 
-    python build.py                              # -> dist/Datalog-Bench.html
-    python build.py --out ../Datalog-Bench.html  # the published copy
-    python build.py --check                      # validate only, write nothing
+    docker compose up -d --build
 
-No third-party packages. Python 3 only, and only at build time — the output has
-zero runtime dependencies.
+Then open <http://localhost:8080>.
 
-Every path defaults to a location relative to `build.py`, so the same command
-works on a workstation and inside a container build stage. Override with
-`--src`, `--sample`, `--out`.
+| Service | Role | Port |
+|---|---|---|
+| `web` | The app, served by nginx (non-root, read-only filesystem) | 127.0.0.1:8080 |
+| `tiles` | Caching proxy for satellite map imagery | internal |
+| `db` | Stores saved logs in SQLite on a named volume (`db-data`) | internal |
 
-## The gate
+`web` proxies `/tiles/` and `/api/` to the other two services, so the browser
+only talks to one origin. Stop the stack with `docker compose down`; the
+`db-data` volume keeps your history across restarts (`docker compose down -v`
+deletes it).
 
-`build.py` exits non-zero if the assembled document fails any structural check:
+The port is bound to loopback only. **The history API has no authentication.**
+To reach it from another machine, change the bind address in `compose.yaml`, and
+only do that on a network you trust or behind your own authenticating reverse
+proxy.
 
-- a source part is missing
-- the sample placeholder is absent, or the sample contains `</script`
-- the `__TILE_BASE__` placeholder is missing from `05-map.js`
-- there are not exactly two `<script>` elements
-- there is no `<title>`
-- the document authors `<!doctype>`, `<html>`, `<body>` or `</head>`
-  (the artifact host supplies those; authoring them breaks the page)
-- HTML elements are unbalanced or unclosed
-- the assembled `<script>` fails `node --check` — added after a mismatched
-  quote in one function corrupted the rest of the script's parsing and shipped
-  past every other check, since none of them touch the DOM-facing files
-  (`04-render.js`/`05-map.js`/`06-shell.js`) that Gate 5 deliberately excludes
+To use the app without Docker, build the single HTML file and open it in a
+browser:
 
-This is a structural gate, not a test suite. `test/run.mjs` is the behavioural
-suite Phase 1 Gate 5 called for — fixture-driven, golden output per fixture,
-zero dependencies (Node's built-in `node:test`) — and the container build gate
-in Phase 2 runs it, failing the image build if either gate fails. `npm test`
-runs it directly; `npm test -- --update` (re)writes golden files after an
-intentional change. `test/db.test.mjs` (`npm run test:db`) does the same for
-the `db` service.
+    python build.py        # writes dist/Datalog-Bench.html
 
-## Ordering constraint
+Without the `db` service there is no history or Compare, and without `tiles`
+the map has no satellite imagery. Analysis of the open log still works.
 
-`04-render.js` and `05-map.js` reference `refresh()` and `activate()`, which are
-declared in `06-shell.js`. Function declarations hoist within the single IIFE,
-so this works — but only because all parts share one scope. Keep the filename
-order, and keep everything inside the one `(function () { ... })()` that
-`01-shell.html` opens and `06-shell.js` closes.
+## Privacy
 
-## Containerisation
+- Analysis runs in your browser. Nothing is uploaded unless you turn on "Save
+  opened logs" or press "Save this log". Saved logs go to the `db` service of
+  your own stack.
+- Logs can contain GPS positions. Keep the stack on a trusted network, and
+  delete saved logs you no longer need from the History panel.
+- Satellite imagery is off by default. When you switch it on, the tile requests
+  for your route's area go through the `tiles` service to Esri World Imagery, so
+  Esri can see that area. The vector basemap makes no external requests.
+- The page loads no third-party scripts, fonts or analytics.
 
-Phase 2's blockers (no version control, no config-injection mechanism for the
-tile URL, no Gate 5 suite) are closed. `docker compose up` brings up three
-services from the project root:
+## Development
 
-- **`web`** — the assembled static file behind nginx, non-root, read-only root
-  filesystem, `/healthz` and `/readyz`, image labelled with the build's git SHA.
-  `05-map.js`'s tile URL is no longer hardcoded — it's a `__TILE_BASE__` token
-  `build.py --tile-base` substitutes at build time (default: the same Esri URL
-  as before, so plain `python build.py` is unchanged).
-- **`tiles`** — a caching reverse proxy in front of Esri World Imagery
-  (`docker/Dockerfile.tiles`), sized for one LAN, not a production tile
-  service. `web` reaches it through its own `/tiles/` location, not by the
-  `tiles` hostname directly — that hostname only resolves inside the compose
-  network, and the browser rendering the page needs a same-origin URL it can
-  actually load images from.
-- **`db`** — the "simple database service" (`db/`): `node:http` + `node:sqlite`
-  (both built into Node, no extra dependency), storing every log the app opens
-  with a SHA-256 content hash for duplicate detection. `/data` is a named
-  volume — the one thing in this stack meant to survive a container recreate.
-  Reached through `web`'s `/api/` location for the same same-origin reason as
-  `tiles`. Has its own test suite (`test/db.test.mjs`, `npm run test:db`),
-  gating its own image's build the same way.
+    src/                 six numbered parts, concatenated in filename order
+      01-shell.html      styles, page skeleton, empty state, history panel
+      02-parse.js        channel spec, parser, unit normalisation
+      03-analyze.js      analysis rules and per-session metrics
+      04-render.js       chart engine, panels, crosshair, readout
+      05-map.js          map projection, tile layer, event markers
+      06-shell.js        summary tiles, mapping UI, file intake, history, compare
+    db/                  history API (node:http + node:sqlite)
+    docker/              nginx configs and the tiles proxy image
+    test/                parser/analysis golden tests, parser edge cases, db tests
+    .github/workflows/   CI: tests, build gate, Docker image build
+    fixtures/            sample inputs for the tests (GPS columns removed)
+    build.py             assembler and structural checks
 
-This means the app's claim of pure client-side analysis no longer holds when
-served through this stack: every opened log is also persisted server-side.
-The dropzone copy and page footer say so.
+The parts share one scope, so keep the filename order and keep everything
+inside the single `(function () { ... })()` that `01-shell.html` opens and
+`06-shell.js` closes.
 
-The **History** panel (button in the app bar) lists everything `db` has saved
-and reopens any of them. Checking two to four saved sessions and clicking
-**Compare selected** opens a side-by-side table of idle/driving trim per bank,
-closed-loop share, peak coolant/intake air, module voltage, and a rule-by-rule
-findings grid — computed with the exact same rule engine the single-log view
-uses, not a second implementation.
+Build and test:
+
+    python build.py            # assemble dist/Datalog-Bench.html and run the checks
+    python build.py --check    # validate only
+    npm test                   # golden tests over fixtures, plus parser edge cases
+    npm test -- --update       # rewrite golden files after an intentional change
+    npm run test:db            # history service tests
+
+Requirements: Node 22.5 or later (the history service uses `node:sqlite`),
+Python 3, and Docker for the compose stack.
+
+`build.py` fails if the assembled page has unbalanced HTML, a missing
+placeholder, the wrong number of `<script>` elements, or a JavaScript syntax
+error (`node --check`). Each Docker image build runs these checks and its test
+suite, and fails if either fails. The only runtime requirement is a browser;
+Python, Node and Docker are needed for building and testing only.
+
+## Contributing
+
+Contributions are welcome. Run `npm test`, `npm run test:db` and `python3
+build.py` before opening a pull request; CI runs the same checks. Do not add
+your own logs to `fixtures/`, because they can contain GPS positions.
+
+Saved-log limits can be tuned with environment variables on the `db` service:
+`MAX_LOGS` (default 500) caps how many logs it will store.
+
+## License
+
+MIT. See `LICENSE`. You may use, copy, modify and redistribute this software
+freely, including commercially.

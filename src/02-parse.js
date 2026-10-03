@@ -145,7 +145,10 @@
     if (s == null) return null;
     var v = String(s).trim();
     if (!v || v === "-" || v === "--" || /^n\/?a$|^nan$|^null$|^inf(inity)?$/i.test(v)) return null;
-    v = decComma ? v.replace(/\./g, "").replace(",", ".") : v.replace(/,/g, "");
+    if (decComma) v = v.replace(/\./g, "").replace(",", ".");
+    else if (/^[+-]?\d{1,3}(,\d{3})+(\.\d+)?$/.test(v)) v = v.replace(/,/g, "");   /* 1,234.5 */
+    else if (/^[+-]?\d+,\d+$/.test(v)) v = v.replace(",", ".");                      /* 1,5 outside a decimal-comma file */
+    else v = v.replace(/,/g, "");
     var n = parseFloat(v);
     return isFinite(n) ? n : null;
   }
@@ -184,14 +187,21 @@
     while (head.length && head[head.length - 1] === "") head.pop();
     var nCol = head.length;
 
-    /* semicolon files usually mean decimal commas; confirm on the first data row */
+    /* A comma can only be a decimal mark when it is not the delimiter. Scan up to
+       40 data rows: some cells with digits,digits and none with a dot decimal. */
     var decComma = false;
-    if (delim === ";") {
-      for (var r = hIdx + 1; r < Math.min(lines.length, hIdx + 12); r++) {
-        if (!lines[r] || !lines[r].trim()) continue;
-        if (/\d,\d/.test(lines[r])) { decComma = true; }
-        break;
+    if (delim !== ",") {
+      var commaCells = 0, dotCells = 0, seen = 0;
+      for (var r = hIdx + 1; r < lines.length && seen < 40; r++) {
+        if (!lines[r] || !lines[r].trim() || /^\s*#/.test(lines[r])) continue;
+        seen++;
+        splitLine(lines[r], delim).forEach(function (c) {
+          c = c.trim();
+          if (/^[+-]?\d+,\d+$/.test(c)) commaCells++;
+          else if (/^[+-]?\d*\.\d+$/.test(c)) dotCells++;
+        });
       }
+      decComma = commaCells > 0 && dotCells === 0;
     }
 
     /* ---- rows ---- */
@@ -314,7 +324,7 @@
         conv = function (v) { return v * 7.5598; };
         warn.push("Mass air flow was in lb/min and has been converted to g/s.");
       }
-      if ((ch.k === "lam1" || ch.k === "lam2") && L.afrCols[ch.k]) {
+      if ((ch.k === "lam1" || ch.k === "lam2") && L.afrCols[ch.k] && L.autoMap[ch.k] === ci) {
         conv = function (v) { return v / STOICH; };
       }
       var arr = readNum(ci, conv);
@@ -351,7 +361,8 @@
       for (var j = n - 1; j >= 0; j--) if (C.t[j] != null) { last = C.t[j]; break; }
       var span = (last != null && t0 != null) ? last - t0 : 0;
       var scale = 1;
-      if (span > 86400 * 3) { scale = 0.001; tWarn = "Time column looked like milliseconds and was divided by 1000."; }
+      if (m.t != null && /\(\s*ms\s*\)|\bmillisec/i.test(L.head[m.t])) { scale = 0.001; tWarn = "Time column was in milliseconds and was divided by 1000."; }
+      else if (span > 86400 * 3) { scale = 0.001; tWarn = "Time column looked like milliseconds and was divided by 1000."; }
       for (var k2 = 0; k2 < n; k2++) C.t[k2] = C.t[k2] == null ? null : (C.t[k2] - t0) * scale;
     } else if (m.stamp != null) {
       var stampCol = L.raw[m.stamp], base = null, ok = 0;
@@ -418,11 +429,13 @@
     var st = new Array(n);
     var hasEct = !!C.ect, hasVss = !!C.vss, hasRpm = !!C.rpm, hasTps = !!C.tps;
     for (var g = 0; g < n; g++) {
+      /* a missing value is unknown, never "closed" or "cold": null compares as 0 */
+      if (hasEct && C.ect[g] == null) { st[g] = "other"; continue; }
       var warmv = hasEct ? (C.ect[g] > 70) : true;
       var running = hasRpm ? C.rpm[g] > 300 : true;
-      var closedThrottle = hasTps ? (C.tps[g] < 15) :
+      var closedThrottle = hasTps ? (C.tps[g] != null && C.tps[g] < 15) :
         (hasVss ? C.vss[g] === 0 : (hasRpm ? C.rpm[g] > 0 && C.rpm[g] < 1200 : false));
-      var openThrottle = hasTps ? (C.tps[g] >= 15) :
+      var openThrottle = hasTps ? (C.tps[g] != null && C.tps[g] >= 15) :
         (hasVss ? C.vss[g] > 5 : (hasRpm ? C.rpm[g] > 1600 : false));
       if (hasEct && !warmv && running) st[g] = "warmup";
       else if (warmv && running && closedThrottle) st[g] = "idle";

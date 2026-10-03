@@ -33,7 +33,7 @@
     }
     if (HAVE.ect) { var e = peak("ect");
       cand.push({ k: "Peak coolant", v: fmt(e, 0), u: "°C", sub: "highest in window",
-        chip: sev(e, 105, 112), lab: e == null ? "no data" : e >= 112 ? "overheating" : e >= 105 ? "hot" : "normal" }); }
+        chip: sev(e, 112, 120), lab: e == null ? "no data" : e >= 120 ? "overheating" : e >= 112 ? "hot" : "normal" }); }
     if (HAVE.iat) { var a = peak("iat");
       cand.push({ k: "Peak intake air", v: fmt(a, 0), u: "°C", sub: "charge temperature",
         chip: sev(a, 70, 95), lab: a == null ? "no data" : a >= 95 ? "very hot" : a >= 70 ? "hot" : "normal" }); }
@@ -62,9 +62,10 @@
     }
     cand.push({ k: "Frames", v: String(sel.length), u: "", sub: "in this window", chip: "neutral", lab: L.n + " total" });
 
-    var tiles = cand.slice(0, 6);
+    var tiles = cand;
     var perRow = window.innerWidth < 620 ? 2 : window.innerWidth < 1080 ? 3 : 6;
-    host.style.gridTemplateColumns = "repeat(" + Math.min(tiles.length, perRow) + ", minmax(0,1fr))";
+    var cols = Math.min(tiles.length, perRow);
+    host.style.gridTemplateColumns = "repeat(" + cols + ", minmax(0,1fr))";
 
     tiles.forEach(function (it) {
       var d = el("div", "kpi");
@@ -78,6 +79,8 @@
       d.appendChild(el("span", "sub", it.sub));
       host.appendChild(d);
     });
+    /* pad the last row so the hairline background doesn't show through gaps */
+    for (var padN = (cols - tiles.length % cols) % cols; padN > 0; padN--) host.appendChild(el("div", "kpi"));
 
     /* session summary: frame count and duration in window */
     var vl = document.getElementById("verdict-line");
@@ -253,22 +256,42 @@
     svg.appendChild(ct2);
     bh.appendChild(svg);
 
-    var drag = null;
-    function tAt(ev) {
+    /* refresh() rebuilds this svg on every move, so drag state and the move/up
+       listeners live on window (registered once, below), not on the svg itself */
+    svg.addEventListener("pointerdown", function (ev) {
       var r = svg.getBoundingClientRect();
-      return T0 + Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * (T1 - T0);
-    }
-    svg.addEventListener("pointerdown", function (ev) { drag = { a: tAt(ev) }; svg.setPointerCapture(ev.pointerId); ev.preventDefault(); });
-    svg.addEventListener("pointermove", function (ev) {
-      if (!drag) return;
-      var b = tAt(ev);
-      if (Math.abs(b - drag.a) < (T1 - T0) / 300) return;
-      F.win = [Math.min(drag.a, b), Math.max(drag.a, b)];
-      HOVER = null; refresh();
+      BRUSH_DRAG = { a: brushT(ev, r), r: r };
+      ev.preventDefault();
     });
-    svg.addEventListener("pointerup", function () { drag = null; });
-    svg.addEventListener("pointercancel", function () { drag = null; });
+    svg.setAttribute("tabindex", "0");
+    svg.addEventListener("keydown", function (ev) {
+      var span = F.win[1] - F.win[0], step = span * 0.1, lo = F.win[0], hi = F.win[1];
+      if (ev.key === "ArrowLeft") { lo -= step; hi -= step; }
+      else if (ev.key === "ArrowRight") { lo += step; hi += step; }
+      else if (ev.key === "+" || ev.key === "=") { lo += step; hi -= step; }
+      else if (ev.key === "-") { lo -= step; hi += step; }
+      else if (ev.key === "Home" || ev.key === "Escape") { lo = T0; hi = T1; }
+      else return;
+      ev.preventDefault();
+      if (lo < T0) { hi += T0 - lo; lo = T0; }
+      if (hi > T1) { lo -= hi - T1; hi = T1; }
+      lo = Math.max(T0, lo); hi = Math.min(T1, hi);
+      if (hi - lo < (T1 - T0) / 300) return;
+      F.win = [lo, hi]; HOVER = null; refresh();
+      var nb = document.querySelector("#brush svg"); if (nb) nb.focus();
+    });
   }
+  var BRUSH_DRAG = null;
+  function brushT(ev, r) { return T0 + Math.max(0, Math.min(1, (ev.clientX - r.left) / (r.width || 1))) * (T1 - T0); }
+  window.addEventListener("pointermove", function (ev) {
+    if (!BRUSH_DRAG) return;
+    var b = brushT(ev, BRUSH_DRAG.r);
+    if (Math.abs(b - BRUSH_DRAG.a) < (T1 - T0) / 300) return;
+    F.win = [Math.min(BRUSH_DRAG.a, b), Math.max(BRUSH_DRAG.a, b)];
+    HOVER = null; refresh();
+  });
+  window.addEventListener("pointerup", function () { BRUSH_DRAG = null; });
+  window.addEventListener("pointercancel", function () { BRUSH_DRAG = null; });
 
   /* ==========================================================
      REFRESH
@@ -347,8 +370,13 @@
     AI = i;
     L = LOGS[i];
     C = L.cols; N = L.n; ST = L.state; HAVE = L.have;
-    T0 = C.t[0]; T1 = C.t[N - 1];
+    T0 = Infinity; T1 = -Infinity;
+    for (var ti = 0; ti < N; ti++) { var tv = C.t[ti]; if (tv != null && isFinite(tv)) { if (tv < T0) T0 = tv; if (tv > T1) T1 = tv; } }
+    if (!isFinite(T0)) { T0 = 0; T1 = 1; }
     if (T1 <= T0) T1 = T0 + 1;
+    TILE_FAIL = false; tileErr = 0; tileOk = 0;
+    var saveNote = document.getElementById("pg-foot-save");
+    if (saveNote) saveNote.textContent = "";
     if (!keepWindow) { F.win = [T0, T1]; F.state = "all"; HOVER = null; }
     else { F.win = [Math.max(T0, F.win[0]), Math.min(T1, F.win[1])]; }
 
@@ -378,18 +406,27 @@
     LOGS.forEach(function (lg, i) {
       var c = el("span", "fchip" + (lg.error ? " bad" : ""));
       c.setAttribute("aria-current", String(i === AI));
-      var nm = el("span", "nm", lg.name);
+      var nm = el(lg.error ? "span" : "button", "nm", lg.name);
       nm.title = lg.name;
-      if (!lg.error) nm.addEventListener("click", function () { activate(i); });
+      if (!lg.error) { nm.type = "button"; nm.addEventListener("click", function () { activate(i); }); }
       c.appendChild(nm);
       c.appendChild(el("span", "ct", lg.error ? "failed" : lg.n + " rows"));
       var x = el("button", "x", "×");
       x.type = "button";
       x.setAttribute("aria-label", "Remove " + lg.name);
       x.addEventListener("click", function () {
+        var wasActive = i === AI;
         LOGS.splice(i, 1);
-        if (!LOGS.length) { L = null; AI = -1; show("app", false); show("empty", true); drawFileChips(); return; }
-        activate(Math.max(0, Math.min(AI >= i ? AI - 1 : AI, LOGS.length - 1)));
+        if (!wasActive && AI > i) AI--;
+        /* a failed-parse entry has no data to show, so only a good log can become active */
+        var want = wasActive ? Math.max(0, i - 1) : AI, pick2 = -1, d;
+        for (d = 0; d < LOGS.length && pick2 < 0; d++) {
+          if (want + d < LOGS.length && !LOGS[want + d].error) pick2 = want + d;
+          else if (want - d >= 0 && want - d < LOGS.length && !LOGS[want - d].error) pick2 = want - d;
+        }
+        if (pick2 < 0) { L = null; AI = -1; show("app", false); show("empty", true); drawFileChips(); return; }
+        if (pick2 === AI && !wasActive) { drawFileChips(); return; }
+        activate(pick2);
       });
       c.appendChild(x);
       host.appendChild(c);
@@ -405,25 +442,45 @@
       return false;
     }
     analyze(lg);
+    /* the bundled sample goes away only once a real log has parsed */
+    if (!isSample) LOGS = LOGS.filter(function (x) { return !x.isSample; });
+    lg.sourceText = text;
     LOGS.push(lg);
+    hideAlert();
     activate(LOGS.length - 1);
     /* the sample is bundled fixture data, not a real session, and a log
-       reloaded from history is already saved — either way there is nothing
-       new to persist */
-    if (!isSample && !fromHistory) saveToHistory(text, name);
+       reloaded from history is already saved. Anything else is saved only if
+       the user has turned saving on. */
+    if (!isSample && !fromHistory && saveEnabled()) saveToHistory(text, name);
     return true;
   }
 
   /* ==========================================================
      HISTORY — save-on-load and the saved-sessions panel
      ========================================================== */
+  /* Saving to the history service is opt-in and off by default: logs can
+     contain GPS positions, and nothing leaves the browser unless asked. */
+  function saveEnabled() { try { return localStorage.getItem("dlb-save") === "1"; } catch (e) { return false; } }
+  function setSaveEnabled(on) { try { localStorage.setItem("dlb-save", on ? "1" : "0"); } catch (e) {} }
+
+  /* parse an API reply without assuming it is JSON (a proxy error page is not) */
+  function apiJson(r) {
+    return r.text().then(function (t) {
+      var b = null;
+      try { b = JSON.parse(t); } catch (e) { b = null; }
+      if (b == null || typeof b !== "object") b = { error: "HTTP " + r.status };
+      return { ok: r.ok, status: r.status, body: b };
+    });
+  }
+
   function saveToHistory(text, name) {
     var note = document.getElementById("pg-foot-save");
+    if (note) note.textContent = "Saving to history…";
     fetch("/api/logs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: name, text: text })
-    }).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+    }).then(apiJson)
       .then(function (res) {
         if (!note) return;
         if (!res.ok) { note.textContent = "Could not save to history: " + (res.body.error || "server error") + "."; return; }
@@ -461,14 +518,15 @@
     note.textContent = "Loading…";
     CMP_SEL = {};
     updateCompareBtn();
-    fetch("/api/logs").then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
+    fetch("/api/logs").then(apiJson)
       .then(function (res) {
         tb.textContent = "";
-        if (!res.ok) { note.textContent = "Could not load history."; return; }
+        if (!res.ok || !Array.isArray(res.body)) { note.textContent = "Could not load history (" + (res.body.error || "unexpected reply") + ")."; return; }
         document.getElementById("history-count").textContent = res.body.length + " saved";
-        if (!res.body.length) { note.textContent = "Nothing saved yet — every log you open here is added automatically."; return; }
+        if (!res.body.length) { note.textContent = "Nothing saved yet. Turn on “Save opened logs” in the app bar, or use “Save this log”, to keep sessions here."; return; }
         note.textContent = "Click a row to reopen that log, or check up to " + CMP_MAX + " to compare them.";
         res.body.forEach(function (row) {
+         try {
           var tr = document.createElement("tr");
           tr.className = "hrow";
           tr.tabIndex = 0;
@@ -498,8 +556,23 @@
           tr.appendChild(el("td", "u", row.sessionStart || new Date(row.uploadedAt).toLocaleString()));
           tr.appendChild(el("td", "u", String(row.rows)));
           var td = document.createElement("td");
-          td.innerHTML = sevChip(row.severity) + " " + esc(row.headline);
+          td.innerHTML = sevChip(row.severity || "neutral") + " " + esc(row.headline || "");
           tr.appendChild(td);
+          var tdd = document.createElement("td");
+          var del = el("button", "btn ghost", "Delete");
+          del.type = "button";
+          del.setAttribute("aria-label", "Delete " + row.name + " from history");
+          del.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            if (!window.confirm("Delete “" + row.name + "” from history? This cannot be undone.")) return;
+            fetch("/api/logs/" + row.id, { method: "DELETE" }).then(apiJson).then(function (res2) {
+              if (!res2.ok) { note.textContent = "Could not delete: " + (res2.body.error || "server error") + "."; return; }
+              loadHistoryList();
+            }).catch(function () { note.textContent = "Could not reach the history database."; });
+          });
+          del.addEventListener("keydown", function (ev) { ev.stopPropagation(); });
+          tdd.appendChild(del);
+          tr.appendChild(tdd);
           function open() {
             fetchRawLog(row.id).then(function (text) {
               addText(text, row.name, false, true);
@@ -507,8 +580,9 @@
             }).catch(function () { note.textContent = "Could not load that log."; });
           }
           tr.addEventListener("click", open);
-          tr.addEventListener("keydown", function (ev) { if (ev.key === "Enter") open(); });
+          tr.addEventListener("keydown", function (ev) { if (ev.key === "Enter" && ev.target === tr) open(); });
           tb.appendChild(tr);
+         } catch (rowErr) { /* one malformed row must not blank the table */ }
         });
       })
       .catch(function () { note.textContent = "Could not reach the history database."; });
@@ -517,6 +591,11 @@
   /* ==========================================================
      COMPARE — two to four saved sessions, side by side
      ========================================================== */
+  function startTimeOf(L) {
+    var line = (L.report.preamble || []).filter(function (x) { return /^#\s*StartTime\s*=/.test(x); })[0];
+    return line ? line.replace(/^#\s*StartTime\s*=\s*/, "") : null;
+  }
+
   function compareMetrics(L, name) {
     var ctx = L.ctx, C = L.cols;
     var idle = ctx.byState.idle, drive = ctx.byState.driving;
@@ -531,7 +610,7 @@
       closedLoopPct = run.length ? (clCount / run.length * 100) : null;
     }
     return {
-      name: name, sessionStart: (L.report.preamble[0] || "").replace("# StartTime = ", "") || null, rows: L.n,
+      name: name, sessionStart: startTimeOf(L), rows: L.n,
       closedLoopPct: closedLoopPct,
       tt1Idle: L.have.tt1 ? medOf(pick(C.tt1, idle)) : null, tt1Drive: L.have.tt1 ? medOf(pick(C.tt1, drive)) : null,
       tt2Idle: L.have.tt2 ? medOf(pick(C.tt2, idle)) : null, tt2Drive: L.have.tt2 ? medOf(pick(C.tt2, drive)) : null,
@@ -539,7 +618,6 @@
       volt: L.have.volt ? medOf(pick(C.volt, ctx.all)) : null,
       metrics: L.metrics,
       channels: Object.keys(L.have).length, columns: L.head.length,
-      findings: L.findings || []
     };
   }
 
@@ -642,6 +720,13 @@
   document.getElementById("btn-compare").addEventListener("click", runCompare);
   document.getElementById("compare-close").addEventListener("click", function () { show("compare-wrap", false); });
 
+  var optSave = document.getElementById("opt-save");
+  optSave.checked = saveEnabled();
+  optSave.addEventListener("change", function () { setSaveEnabled(optSave.checked); });
+  document.getElementById("btn-save-current").addEventListener("click", function () {
+    if (L && L.sourceText && !L.isSample) saveToHistory(L.sourceText, L.name);
+    else { var n = document.getElementById("pg-foot-save"); if (n) n.textContent = "The bundled sample is not saved."; }
+  });
   document.getElementById("btn-history").addEventListener("click", function () {
     var willShow = document.getElementById("history-wrap").hidden;
     show("history-wrap", willShow);
@@ -651,20 +736,23 @@
   document.getElementById("history-close").addEventListener("click", function () { show("history-wrap", false); });
 
   function alertBanner(msg) {
-    var b = document.getElementById("sample-banner");
+    var b = document.getElementById("alert-banner");
     b.hidden = false;
-    b.innerHTML = '<span class="chip critical"><i class="dot"></i><span>Parse failed</span></span><span>' + esc(msg) + "</span>";
+    b.innerHTML = '<span class="chip critical"><i class="dot"></i><span>Problem</span></span><span>' + esc(msg) + "</span>";
   }
+  function hideAlert() { var b = document.getElementById("alert-banner"); if (b) b.hidden = true; }
 
   function readFiles(list) {
     var files = Array.prototype.slice.call(list || []);
     if (!files.length) return;
-    /* drop the bundled sample as soon as a real log arrives */
-    if (LOGS.length === 1 && LOGS[0].isSample) { LOGS = []; AI = -1; }
     var pending = files.length;
     files.forEach(function (f) {
       var rd = new FileReader();
-      rd.onload = function () { addText(String(rd.result), f.name, false); if (!--pending) drawFileChips(); };
+      rd.onload = function () {
+        try { addText(String(rd.result), f.name, false); }
+        catch (err) { alertBanner(f.name + ": could not be analysed (" + ((err && err.message) || "unexpected error") + ")."); }
+        if (!--pending) drawFileChips();
+      };
       rd.onerror = function () { alertBanner("Could not read " + f.name + "."); if (!--pending) drawFileChips(); };
       rd.readAsText(f);
     });
@@ -697,7 +785,7 @@
     var txt = node ? node.textContent : "";
     if (!txt || txt.length < 200) { show("empty", true); return; }
     if (LOGS.length === 1 && LOGS[0].isSample) { activate(0); return; }
-    addText(txt, "Sample — Gunther session.csv", true);
+    addText(txt, "Sample session.csv", true);
   }
 
   var rt2;

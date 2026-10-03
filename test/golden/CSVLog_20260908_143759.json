@@ -19,9 +19,6 @@
     "o2b1s2": true,
     "o2b2s2": true,
     "fs1": true,
-    "lat": true,
-    "lon": true,
-    "alt": true,
     "tt1": true,
     "tt2": true,
     "lean": true,
@@ -30,7 +27,7 @@
   "report": {
     "delim": ",",
     "headerLine": 2,
-    "columns": 25,
+    "columns": 22,
     "rows": 443,
     "skipped": 0,
     "ragged": 0,
@@ -100,12 +97,6 @@
       "sev": "good",
       "tag": "Cooling",
       "h": "Coolant temperature stayed normal"
-    },
-    {
-      "id": "gps-precision",
-      "sev": "good",
-      "tag": "Log quality",
-      "h": "GPS fixes are full precision"
     }
   ],
   "metrics": {
@@ -126,6 +117,10 @@
       {
         "id": "volt",
         "missing": "volt"
+      },
+      {
+        "id": "gps-precision",
+        "missing": "lat"
       }
     ]
   }

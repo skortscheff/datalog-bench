@@ -1,3 +1,9 @@
+# Ports are published on loopback only (127.0.0.1), so by default the app is
+# reachable from this machine alone. There is NO authentication: to expose it
+# on a LAN, change the bind address (e.g. "0.0.0.0:8080:8080" or a specific LAN
+# IP) only on a network you trust, or put an authenticating proxy in front.
+# The tiles and db services have no published ports; web reaches them
+# internally (/tiles/ and /api/).
 services:
   web:
     build:
@@ -9,15 +15,22 @@ services:
         TILE_BASE: "/tiles/{z}/{y}/{x}"
         GIT_SHA: "${GIT_SHA:-dev}"
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
     read_only: true
     tmpfs:
       - /var/cache/nginx:uid=10001,gid=10001,mode=0755
       - /var/run:uid=10001,gid=10001,mode=0755
       - /tmp:uid=10001,gid=10001,mode=0755
     depends_on:
-      - tiles
-      - db
+      tiles:
+        condition: service_healthy
+      db:
+        condition: service_healthy
     healthcheck:
       # 127.0.0.1, not localhost: localhost resolves ::1 first inside the
       # container and nginx here only listens on IPv4.
@@ -33,14 +46,22 @@ services:
     environment:
       TILE_CACHE_TTL: "2592000"
       TILE_CACHE_MAX_SIZE_MB: "512"
-    ports:
-      - "8081:8080"
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
     read_only: true
     tmpfs:
       - /var/cache/nginx:uid=10001,gid=10001,mode=0755
       - /var/run:uid=10001,gid=10001,mode=0755
       - /tmp:uid=10001,gid=10001,mode=0755
       - /etc/nginx/conf.d:uid=10001,gid=10001,mode=0755
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   # Simple database service: an HTTP API in front of a SQLite file, storing
   # every log the app opens with a content-hash dedup key. /data is a named
@@ -50,6 +71,11 @@ services:
     build:
       context: .
       dockerfile: db/Dockerfile
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
     volumes:
       - db-data:/data
     read_only: true

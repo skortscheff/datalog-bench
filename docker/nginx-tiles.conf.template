@@ -10,6 +10,10 @@
 proxy_cache_path /var/cache/nginx/tiles levels=1:2 keys_zone=tiles:10m
     max_size=${TILE_CACHE_MAX_SIZE_MB}m inactive=7d use_temp_path=off;
 
+# One shared client (the web container) fronts every browser, so the limit is
+# loose enough for a map view loading a few dozen tiles at once.
+limit_req_zone $binary_remote_addr zone=tilereq:1m rate=100r/s;
+
 server {
     listen 8080;
     server_tokens off;
@@ -19,17 +23,28 @@ server {
         return 200 '{"status":"ok"}';
     }
 
-    location / {
-        # proxy_pass with no path of its own would forward the request URI
-        # verbatim ("/{z}/{y}/{x}"), dropping Esri's actual path prefix — the
-        # prefix has to be part of proxy_pass itself.
-        proxy_pass https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/;
+    # Only /{z}/{y}/{x} is proxied; anything else is a 404. The rewrite builds
+    # Esri's real path (proxy_pass can't carry a URI inside a regex location)
+    # and its trailing "?" drops the query string so it can't vary the cache.
+    location ~ ^/\d+/\d+/\d+$ {
+        limit_except GET HEAD { deny all; }
+        limit_req zone=tilereq burst=200 nodelay;
+        limit_req_status 429;
+        rewrite ^/(.*)$ /ArcGIS/rest/services/World_Imagery/MapServer/tile/$1? break;
+        proxy_pass https://server.arcgisonline.com;
         proxy_cache tiles;
+        proxy_cache_key $uri;
+        proxy_cache_lock on;
         proxy_cache_valid 200 ${TILE_CACHE_TTL}s;
         proxy_cache_use_stale error timeout updating http_502 http_503 http_504;
         proxy_set_header Host server.arcgisonline.com;
         proxy_ssl_server_name on;
         add_header X-Cache-Status $upstream_cache_status always;
         add_header X-Tile-Attribution "Imagery (c) Esri, Maxar, Earthstar Geographics" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    location / {
+        return 404;
     }
 }
