@@ -303,6 +303,19 @@
         ? '<span><i style="background:var(--s1)"></i>Bank 1</span><span><i style="background:var(--s2)"></i>Bank 2</span>'
         : '<span><i style="background:var(--s1)"></i>Total trim</span>';
     }
+    [["ltft", "Long-term fuel trim"], ["stft", "Short-term fuel trim"]].forEach(function (pt) {
+      var id = pt[0], has1 = HAVE[id + "1"], has2 = HAVE[id + "2"];
+      document.getElementById("card-" + id).hidden = !has1;
+      if (!has1) return;
+      var spec = { id: id, title: pt[1], unit: "%", dp: 1, h: 200, zero: 0,
+        series: has2 ? [{ k: id + "1", label: "Bank 1", color: "s1" }, { k: id + "2", label: "Bank 2", color: "s2" }]
+                     : [{ k: id + "1", label: "Bank 1", color: "s1" }] };
+      var host = document.getElementById("ch-" + id);
+      painters.push(drawTime(host, spec, widthOf(host)));
+      document.getElementById(id + "-legend").innerHTML = has2
+        ? '<span><i style="background:var(--s1)"></i>Bank 1</span><span><i style="background:var(--s2)"></i>Bank 2</span>'
+        : '<span><i style="background:var(--s1)"></i>Bank 1</span>';
+    });
     PANELS.forEach(function (p) { painters.push(drawTime(p.host, p, widthOf(p.host))); });
 
     var dtSpec = { id: "dt", title: "Sample interval", unit: "s", dp: 2, kind: "bar",
