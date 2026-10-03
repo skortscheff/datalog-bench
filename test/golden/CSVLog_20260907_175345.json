@@ -95,5 +95,20 @@
       "tag": "Log quality",
       "h": "GPS fixes are full precision"
     }
-  ]
+  ],
+  "metrics": {
+    "iatSlope": null,
+    "iatSlopeReason": "intake air varied under 8 °C at idle",
+    "cadence": {
+      "dt": 3.612,
+      "repeatRun": 1
+    },
+    "unitsConverted": false,
+    "skippedRules": [
+      {
+        "id": "volt",
+        "missing": "volt"
+      }
+    ]
+  }
 }

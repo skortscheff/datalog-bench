@@ -1,0 +1,117 @@
+{
+  "error": null,
+  "have": {
+    "t": true,
+    "rpm": true,
+    "load": true,
+    "maf": true,
+    "ect": true,
+    "iat": true,
+    "stft1": true,
+    "ltft1": true,
+    "stft2": true,
+    "ltft2": true,
+    "lam1": true,
+    "lam2": true,
+    "tt1": true,
+    "tt2": true,
+    "lean": true,
+    "dt": true
+  },
+  "report": {
+    "delim": ",",
+    "headerLine": 2,
+    "columns": 12,
+    "rows": 1082,
+    "skipped": 0,
+    "ragged": 0,
+    "decComma": false,
+    "preamble": [
+      "# StartTime = 10/02/2026 02:35:05.4273 PM"
+    ],
+    "warnings": []
+  },
+  "findings": [
+    {
+      "id": "load-dep",
+      "sev": "neutral",
+      "tag": "Load dependence",
+      "h": "Correction is flat across load"
+    },
+    {
+      "id": "rich-excursion",
+      "sev": "neutral",
+      "tag": "Fuel trim",
+      "h": "Worst rich excursion: -19.5 %"
+    },
+    {
+      "id": "coverage",
+      "sev": "neutral",
+      "tag": "Coverage",
+      "h": "3 diagnostic channels missing from this log"
+    },
+    {
+      "id": "trim-level",
+      "sev": "good",
+      "tag": "Fuel trim",
+      "h": "Fuel trims sit inside the ECU's comfortable range"
+    },
+    {
+      "id": "bank-balance",
+      "sev": "good",
+      "tag": "Bank balance",
+      "h": "Both banks are corrected by the same amount"
+    },
+    {
+      "id": "iat",
+      "sev": "good",
+      "tag": "Intake air",
+      "h": "Intake air stays cool"
+    },
+    {
+      "id": "ect",
+      "sev": "good",
+      "tag": "Cooling",
+      "h": "Coolant temperature stayed normal"
+    },
+    {
+      "id": "gaps",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "Clean capture at 1.00 s per frame"
+    }
+  ],
+  "metrics": {
+    "iatSlope": {
+      "slope": 0.40462367404614835,
+      "r": 0.4444885405010009,
+      "n": 738,
+      "iatLo": 42,
+      "iatHi": 63
+    },
+    "iatSlopeReason": null,
+    "cadence": {
+      "dt": 1.0009999999999764,
+      "repeatRun": 2
+    },
+    "unitsConverted": false,
+    "skippedRules": [
+      {
+        "id": "cat",
+        "missing": "o2b1s2"
+      },
+      {
+        "id": "volt",
+        "missing": "volt"
+      },
+      {
+        "id": "ratio",
+        "missing": "vss"
+      },
+      {
+        "id": "gps-precision",
+        "missing": "lat"
+      }
+    ]
+  }
+}

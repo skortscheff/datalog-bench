@@ -1,0 +1,102 @@
+{
+  "error": null,
+  "have": {
+    "t": true,
+    "rpm": true,
+    "maf": true,
+    "stft1": true,
+    "ltft1": true,
+    "stft2": true,
+    "ltft2": true,
+    "tt1": true,
+    "tt2": true,
+    "lean": true,
+    "dt": true
+  },
+  "report": {
+    "delim": ",",
+    "headerLine": 2,
+    "columns": 7,
+    "rows": 1680,
+    "skipped": 0,
+    "ragged": 0,
+    "decComma": false,
+    "preamble": [
+      "# StartTime = 09/30/2026 01:18:13.3197 PM"
+    ],
+    "warnings": []
+  },
+  "findings": [
+    {
+      "id": "load-dep",
+      "sev": "warning",
+      "tag": "Load dependence",
+      "h": "Lean gets worse the less air the engine is moving"
+    },
+    {
+      "id": "rich-excursion",
+      "sev": "warning",
+      "tag": "Fuel trim",
+      "h": "Worst rich excursion: -20.3 %"
+    },
+    {
+      "id": "coverage",
+      "sev": "neutral",
+      "tag": "Coverage",
+      "h": "5 diagnostic channels missing from this log"
+    },
+    {
+      "id": "trim-level",
+      "sev": "good",
+      "tag": "Fuel trim",
+      "h": "Fuel trims sit inside the ECU's comfortable range"
+    },
+    {
+      "id": "bank-balance",
+      "sev": "good",
+      "tag": "Bank balance",
+      "h": "Both banks are corrected by the same amount"
+    },
+    {
+      "id": "gaps",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "Clean capture at 1.00 s per frame"
+    }
+  ],
+  "metrics": {
+    "iatSlope": null,
+    "iatSlopeReason": "needs intake air temperature and fuel trim",
+    "cadence": {
+      "dt": 1.0009999999999764,
+      "repeatRun": 1
+    },
+    "unitsConverted": false,
+    "skippedRules": [
+      {
+        "id": "iat",
+        "missing": "iat"
+      },
+      {
+        "id": "ect",
+        "missing": "ect"
+      },
+      {
+        "id": "cat",
+        "missing": "o2b1s2"
+      },
+      {
+        "id": "volt",
+        "missing": "volt"
+      },
+      {
+        "id": "ratio",
+        "missing": "vss"
+      },
+      {
+        "id": "gps-precision",
+        "missing": "lat"
+      }
+    ]
+  }
+}

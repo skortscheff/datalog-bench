@@ -149,7 +149,7 @@
           return { sev: "warning", tag: "Load dependence",
             h: "Lean gets worse the less air the engine is moving",
             p: "Trim runs " + sg(mi) + " % at idle against " + sg(md) + " % while driving — " + n1(d) +
-               " % worse at low airflow. That is the signature of a fixed leak of unmetered air: at idle it is a large fraction of total flow, under load it is diluted. Smoke-test the intake tract after the mass-air sensor, the PCV system, and every vacuum line before touching the fuel side.",
+               " % worse at low airflow. A fixed leak of unmetered air produces this pattern, because it is a large share of total flow at idle and is diluted under load. A temperature-dependent intake-air or airflow reading can produce it too, so check trim against intake air temperature (see the Compare table) before smoke-testing the intake tract.",
             ev: ev };
         }
         var idleIat2 = x.have.iat && idle.length > 8 ? med(at(x.C.iat, idle)) : null;
@@ -449,6 +449,76 @@
       } }
   ];
 
+  /* ---------------- per-session metrics (shown in Compare) ---------------- */
+
+  /* least-squares slope of ys on xs, with Pearson r; null under 5 usable pairs */
+  function fit(xs, ys) {
+    var px = [], py = [], i;
+    for (i = 0; i < xs.length; i++) if (xs[i] != null && ys[i] != null && isFinite(xs[i]) && isFinite(ys[i])) { px.push(xs[i]); py.push(ys[i]); }
+    if (px.length < 5) return null;
+    var mx = 0, my = 0; for (i = 0; i < px.length; i++) { mx += px[i]; my += py[i]; }
+    mx /= px.length; my /= py.length;
+    var cov = 0, sx = 0, sy = 0;
+    for (i = 0; i < px.length; i++) { var dx = px[i] - mx, dy = py[i] - my; cov += dx * dy; sx += dx * dx; sy += dy * dy; }
+    return sx ? { slope: cov / sx, r: sy ? cov / Math.sqrt(sx * sy) : null, n: px.length } : null;
+  }
+
+  /* most common length of a run of identical consecutive values */
+  function modalRun(col) {
+    var counts = {}, run = 0, prev, i, v, best = null, bestN = 0, k;
+    for (i = 0; i <= col.length; i++) {
+      v = i < col.length ? col[i] : undefined;
+      if (i < col.length && v != null && v === prev) { run++; continue; }
+      if (run > 0) counts[run] = (counts[run] || 0) + 1;
+      run = v == null ? 0 : 1; prev = v;
+    }
+    for (k in counts) if (counts[k] > bestN) { bestN = counts[k]; best = +k; }
+    return best;
+  }
+
+  var IAT_SLOPE_MIN_FRAMES = 30, IAT_SLOPE_MIN_RANGE = 8;
+
+  function computeMetrics(L, ctx, skipped) {
+    var C = L.cols, i;
+
+    /* total trim against intake air temperature across warm idle frames. A
+       cold-rich/hot-lean slope here is the temperature dependence documented
+       for this car; the fit says nothing about which part causes it. */
+    var iatSlope = null, iatReason = null;
+    if (!L.have.iat || !L.have.tt1) iatReason = "needs intake air temperature and fuel trim";
+    else {
+      var idle = ctx.byState.idle.filter(function (j) { return !L.have.ect || C.ect[j] > 70; });
+      var xs = [], ys = [];
+      for (i = 0; i < idle.length; i++) {
+        var a = C.tt1[idle[i]], b = L.have.tt2 ? C.tt2[idle[i]] : a;
+        if (a == null || b == null) continue;
+        xs.push(C.iat[idle[i]]); ys.push((a + b) / 2);
+      }
+      var lo = Infinity, hi = -Infinity;
+      for (i = 0; i < xs.length; i++) if (xs[i] != null) { if (xs[i] < lo) lo = xs[i]; if (xs[i] > hi) hi = xs[i]; }
+      if (xs.length < IAT_SLOPE_MIN_FRAMES) iatReason = "under " + IAT_SLOPE_MIN_FRAMES + " warm idle frames";
+      else if (hi - lo < IAT_SLOPE_MIN_RANGE) iatReason = "intake air varied under " + IAT_SLOPE_MIN_RANGE + " °C at idle";
+      else {
+        var f = fit(xs, ys);
+        if (f) iatSlope = { slope: f.slope, r: f.r, n: f.n, iatLo: lo, iatHi: hi };
+        else iatReason = "no usable idle frames";
+      }
+    }
+
+    /* logging cadence: row spacing, and how many rows a value typically repeats
+       for — tells a faster adapter from a slower one, which row timing alone does not */
+    var runs = [];
+    ["rpm", "maf", "stft1"].forEach(function (k) { if (L.have[k]) { var m = modalRun(C[k]); if (m != null) runs.push(m); } });
+    var cadence = {
+      dt: L.noTime ? null : med(C.dt || []),
+      repeatRun: runs.length ? med(runs) : null
+    };
+
+    var converted = (L.unitWarnings || []).some(function (w) { return /has been converted/.test(w); });
+    return { iatSlope: iatSlope, iatSlopeReason: iatReason, cadence: cadence,
+             unitsConverted: converted, skippedRules: skipped };
+  }
+
   function analyze(L) {
     var C = L.cols, n = L.n, i;
     var all = []; for (i = 0; i < n; i++) all.push(i);
@@ -472,15 +542,16 @@
     var ctx = { L: L, C: C, n: n, all: all, byState: byState, have: L.have,
                 trimFrames: trimFrames, trimLabel: trimLabel, noTime: L.noTime };
 
-    var out = [];
+    var out = [], skipped = [];
     RULES.forEach(function (rule) {
-      for (var k = 0; k < rule.need.length; k++) if (!L.have[rule.need[k]]) return;
+      for (var k = 0; k < rule.need.length; k++) if (!L.have[rule.need[k]]) { skipped.push({ id: rule.id, missing: rule.need[k] }); return; }
       var f;
       try { f = rule.run(ctx); } catch (e) { f = null; }
       if (f) { f.id = rule.id; out.push(f); }
     });
     out.sort(function (a, b) { return SEV_RANK[a.sev] - SEV_RANK[b.sev]; });
     L.findings = out;
+    L.metrics = computeMetrics(L, ctx, skipped);
     L.ctx = ctx;
     L.rulesetVersion = RULESET_VERSION;
     return out;

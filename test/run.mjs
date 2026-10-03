@@ -32,6 +32,7 @@ function reduce(L) {
     have: L.have,
     report: L.report,
     findings: findings.map((f) => ({ id: f.id, sev: f.sev, tag: f.tag, h: f.h })),
+    metrics: L.metrics,
   };
   // parseLog/analyze run inside a vm sandbox with its own realm, so the plain
   // objects they return have a different Object.prototype than this file's —

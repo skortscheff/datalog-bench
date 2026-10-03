@@ -95,5 +95,26 @@
       "tag": "Log quality",
       "h": "GPS fixes are full precision"
     }
-  ]
+  ],
+  "metrics": {
+    "iatSlope": {
+      "slope": -0.28283911270960665,
+      "r": -0.3681203008098803,
+      "n": 184,
+      "iatLo": 51,
+      "iatHi": 69
+    },
+    "iatSlopeReason": null,
+    "cadence": {
+      "dt": 3.5790000000000077,
+      "repeatRun": 1
+    },
+    "unitsConverted": false,
+    "skippedRules": [
+      {
+        "id": "volt",
+        "missing": "volt"
+      }
+    ]
+  }
 }

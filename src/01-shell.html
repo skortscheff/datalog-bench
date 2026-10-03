@@ -351,7 +351,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
       <span class="grow"></span>
       <button class="btn ghost" type="button" id="compare-close">Close</button>
     </header>
-    <p class="note">Idle and driving trim use each log's own warm frames, exactly as the Fuel correction and Load-dependence findings do &mdash; the same numbers, side by side.</p>
+    <p class="note">Idle and driving trim use each log's own warm frames &mdash; the same numbers, side by side.</p>
     <div class="tablewrap"><table class="maptbl" id="compare-tbl"><thead></thead><tbody></tbody></table></div>
     <p class="note" id="compare-note">&mdash;</p>
   </div>
@@ -471,17 +471,13 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
 
     <div id="sec-state" hidden>
       <div class="sec"><h2>Fuel trim by operating state</h2>
-        <p>Median total correction, split by what the engine was doing. Lean that worsens at low airflow points at unmetered air; lean that worsens under load points at fuel delivery.</p></div>
+        <p>Median total correction, split by operating state.</p></div>
       <div class="card">
         <header><h3>Median total correction</h3><span class="unit">%</span><span class="grow"></span>
           <div class="legend" id="state-legend"></div></header>
         <div class="chart" id="ch-state"></div>
       </div>
     </div>
-
-    <div class="sec"><h2>Findings</h2>
-      <p>Computed from the whole log, not the current window. Each one names the numbers it rests on.</p></div>
-    <div class="finds" id="finds"></div>
 
     <div class="sec"><h2>Table view</h2>
       <p id="tbl-intro">Every source column, every frame in the current window &mdash; the colour-free twin of every chart above.</p></div>

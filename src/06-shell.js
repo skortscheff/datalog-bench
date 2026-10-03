@@ -79,46 +79,16 @@
       host.appendChild(d);
     });
 
-    /* headline sentence, assembled from the worst findings this log produced */
+    /* session summary: frame count and duration in window */
     var vl = document.getElementById("verdict-line");
     if (!sel.length) { vl.textContent = "No frames match the current window and state filter."; return; }
-    var bad = (L.findings || []).filter(function (f) { return f.sev === "critical" || f.sev === "serious" || f.sev === "warning"; });
-    vl.textContent = bad.length
-      ? bad.slice(0, 2).map(function (f) { return f.h; }).join("; ") +
-        (bad.length > 2 ? "; and " + (bad.length - 2) + " more below." : ".")
-      : "Nothing in this log crosses a diagnostic threshold — see the findings below for what was checked and passed.";
+    var durMin = (!L.noTime && C.t && C.t.length > 1) ? ((C.t[sel[sel.length - 1]] - C.t[sel[0]]) / 60) : null;
+    vl.textContent = sel.length === L.n
+      ? L.n + " frames" + (durMin != null ? " (" + n1(durMin, 1) + " min)" : "") + "."
+      : sel.length + " of " + L.n + " frames in selected window" + (durMin != null ? " (" + n1(durMin, 1) + " min)" : "") + ".";
   }
 
-  /* ==========================================================
-     FINDINGS
-     ========================================================== */
-  function drawFindings() {
-    var host = document.getElementById("finds");
-    host.textContent = "";
-    var fs = L.findings || [];
-    if (!fs.length) {
-      host.appendChild(el("div", "ev-empty", "No rule had enough channels to run on this log. Map more columns in the Channels panel above, or log more PIDs."));
-      return;
-    }
-    fs.forEach(function (f) {
-      var d = el("div", "find");
-      var left = el("div");
-      var c = el("span", "chip " + f.sev);
-      c.appendChild(el("i", "dot"));
-      c.appendChild(el("span", null, f.sev === "neutral" ? "Note" : f.sev.charAt(0).toUpperCase() + f.sev.slice(1)));
-      left.appendChild(c);
-      left.appendChild(el("div", "ev", f.tag));
-      d.appendChild(left);
-      var mid = el("div");
-      mid.appendChild(el("h4", null, f.h));
-      mid.appendChild(el("p", null, f.p));
-      d.appendChild(mid);
-      var ev = el("div", "ev");
-      ev.innerHTML = (f.ev || []).map(function (x) { return esc(x[0]) + " <b>" + esc(x[1]) + "</b>"; }).join("<br>");
-      d.appendChild(ev);
-      host.appendChild(d);
-    });
-  }
+  function drawFindings() {}
 
   /* ==========================================================
      PARSE REPORT + CHANNEL MAPPING
@@ -380,14 +350,12 @@
     buildPanelCards();
     buildReadoutDefs();
     drawChannelPanel();
-    drawFindings();
     drawFileChips();
 
     var mapped = Object.keys(L.mapping).length;
     document.getElementById("pg-foot").innerHTML =
       "<b>" + esc(L.name) + "</b> — " + L.n + " frames, " + L.head.length + " source columns, " + mapped +
-      " mapped to known channels. Every value shown is computed here in this browser with no smoothing or interpolation, and the table view holds the source columns verbatim. " +
-      "Findings are computed from thresholds that are conventional for OBD-II diagnostics, not vehicle-specific — treat them as where to look first, not as a verdict.";
+      " mapped to known channels. Every value shown is computed here in this browser with no smoothing or interpolation, and the table view holds the source columns verbatim.";
     refresh();
   }
 
@@ -556,6 +524,8 @@
       tt2Idle: L.have.tt2 ? medOf(pick(C.tt2, idle)) : null, tt2Drive: L.have.tt2 ? medOf(pick(C.tt2, drive)) : null,
       peakEct: L.have.ect ? maxOf(C.ect, ctx.all) : null, peakIat: L.have.iat ? maxOf(C.iat, ctx.all) : null,
       volt: L.have.volt ? medOf(pick(C.volt, ctx.all)) : null,
+      metrics: L.metrics,
+      channels: Object.keys(L.have).length, columns: L.head.length,
       findings: L.findings || []
     };
   }
@@ -606,6 +576,13 @@
       tb.appendChild(tr);
     }
 
+    function textRow(label, get) {
+      var tr = document.createElement("tr");
+      tr.appendChild(el("td", "mlab", label));
+      cols.forEach(function (c) { tr.appendChild(el("td", "mval", c.error || !c.metrics ? "—" : get(c))); });
+      tb.appendChild(tr);
+    }
+
     var anyErr = cols.some(function (c) { return c.error; });
     if (anyErr) {
       var tre = document.createElement("tr");
@@ -624,25 +601,29 @@
     metricRow("Bank 2, idle", function (c) { return c.tt2Idle; }, sgn, "%");
     metricRow("Bank 2, driving", function (c) { return c.tt2Drive; }, sgn, "%");
 
+    grpRow("Trim vs intake air (warm idle)");
+    function slopeCell(c) { return c.metrics && c.metrics.iatSlope; }
+    metricRow("Slope", function (c) { var s = slopeCell(c); return s ? s.slope : null; }, function (v) { return v == null ? "—" : sgn(v, 2); }, "%/°C");
+    metricRow("Correlation r", function (c) { var s = slopeCell(c); return s ? s.r : null; }, function (v) { return fmt(v, 2); });
+    metricRow("Idle frames used", function (c) { var s = slopeCell(c); return s ? s.n : null; }, function (v) { return v == null ? "—" : String(v); });
+    textRow("Intake air range", function (c) { var s = slopeCell(c); return s ? Math.round(s.iatLo) + "–" + Math.round(s.iatHi) + " °C" : "—"; });
+    textRow("Not computed because", function (c) { return c.metrics.iatSlopeReason || "—"; });
+
+    grpRow("Capture");
+    metricRow("Row spacing", function (c) { return c.metrics && c.metrics.cadence.dt; }, function (v) { return fmt(v, 2); }, "s");
+    metricRow("Repeated-value run", function (c) { return c.metrics && c.metrics.cadence.repeatRun; },
+      function (v) { return v == null ? "—" : String(v); }, "rows");
+    textRow("Units", function (c) { return c.metrics.unitsConverted ? "converted from imperial" : "metric"; });
+    textRow("Channels mapped", function (c) { return c.channels + " of " + c.columns + " columns"; });
+    textRow("Checks skipped", function (c) {
+      var s = c.metrics.skippedRules;
+      return s.length ? s.length + " (" + s.map(function (x) { return x.id; }).join(", ") + ")" : "none";
+    });
+
     grpRow("Other channels");
     metricRow("Peak coolant", function (c) { return c.peakEct; }, function (v) { return fmt(v, 0); }, "°C");
     metricRow("Peak intake air", function (c) { return c.peakIat; }, function (v) { return fmt(v, 0); }, "°C");
     metricRow("Module voltage", function (c) { return c.volt; }, function (v) { return fmt(v, 2); }, "V");
-
-    grpRow("Findings, by rule");
-    var ruleOrder = [], seen = {};
-    cols.forEach(function (c) { (c.findings || []).forEach(function (f) { if (!seen[f.id]) { seen[f.id] = f.tag; ruleOrder.push(f.id); } }); });
-    ruleOrder.forEach(function (id) {
-      var tr = document.createElement("tr");
-      tr.appendChild(el("td", "mlab", seen[id]));
-      cols.forEach(function (c) {
-        var f = (c.findings || []).filter(function (x) { return x.id === id; })[0];
-        var td = document.createElement("td");
-        td.innerHTML = f ? sevChip(f.sev) + ' <span style="font-size:11.5px">' + esc(f.h) + "</span>" : '<span style="color:var(--ink-muted)">— not run —</span>';
-        tr.appendChild(td);
-      });
-      tb.appendChild(tr);
-    });
   }
 
   document.getElementById("btn-compare").addEventListener("click", runCompare);

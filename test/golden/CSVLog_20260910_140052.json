@@ -107,5 +107,26 @@
       "tag": "Log quality",
       "h": "Clean capture at 2.00 s per frame"
     }
-  ]
+  ],
+  "metrics": {
+    "iatSlope": {
+      "slope": 0.3399875526758543,
+      "r": 0.4979396087896893,
+      "n": 672,
+      "iatLo": 38,
+      "iatHi": 71
+    },
+    "iatSlopeReason": null,
+    "cadence": {
+      "dt": 2.0009999999999764,
+      "repeatRun": 4
+    },
+    "unitsConverted": false,
+    "skippedRules": [
+      {
+        "id": "volt",
+        "missing": "volt"
+      }
+    ]
+  }
 }
