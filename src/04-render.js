@@ -153,11 +153,11 @@
           if (!open || gap) { d += "M" + xt(C.t[VIEW[q]]).toFixed(1) + " " + yv(vv).toFixed(1); open = true; }
           else d += "L" + xt(C.t[VIEW[q]]).toFixed(1) + " " + yv(vv).toFixed(1);
         }
-        svg.appendChild(svgEl("path", { d: d, fill: "none", stroke: SC[se.color], "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+        svg.appendChild(svgEl("path", { d: d, fill: "none", stroke: SC[se.color], "stroke-width": VIEW.length > 600 ? 1.4 : 1.8, "stroke-linejoin": "round", "stroke-linecap": "round" }));
       });
       /* two series that track each other collide at the endpoint, so label
          them where they separate most and push each away from the other */
-      if (spec.series.length === 2 && VIEW.length) {
+      if (spec.directLabels && spec.series.length === 2 && VIEW.length) {
         var ka = spec.series[0].k, kb = spec.series[1].k, bq = -1, bsep = -1;
         for (var q2 = 0; q2 < VIEW.length; q2++) {
           var va = C[ka][VIEW[q2]], vb = C[kb][VIEW[q2]];
@@ -259,8 +259,6 @@
     one("rpm", "Engine speed", "RPM", 0);
     one("vss", "Vehicle speed", "km/h", 0);
     one("maf", "Air mass flow", "g/s", 2);
-    one("map", "Manifold pressure", "kPa", 1);
-    one("tps", "Throttle position", "%", 1);
     one("load", "Calculated load", "%", 1);
 
     if (HAVE.ect && HAVE.iat) d.push({ id: "temp", title: "Coolant vs intake air", unit: "°C", dp: 0,
@@ -274,12 +272,7 @@
       ref: [{ v: 1, label: "λ 1.00" }],
       note: L && L.afrCols && L.afrCols.lam1 ? "Converted from the log's air/fuel ratio column, assuming gasoline at 14.7:1." : null });
 
-    if (HAVE.o2b1s2) d.push({ id: "o2r", title: "Post-catalyst O₂", unit: "V", dp: 2,
-      series: HAVE.o2b2s2 ? [{ k: "o2b1s2", label: "B1S2", color: "s1" }, { k: "o2b2s2", label: "B2S2", color: "s2" }]
-                          : [{ k: "o2b1s2", label: "B1S2", color: "s1" }] });
-
     one("spark", "Ignition advance", "deg", 1, { zero: 0 });
-    one("volt", "Module voltage", "V", 2);
     PANELS = d;
   }
 
@@ -311,7 +304,6 @@
   }
 
   /* ---------- shared frame readout ---------- */
-  var FS_NAMES = { 0: "—", 1: "open / warm-up", 2: "closed loop", 4: "open / driving", 8: "open / fault", 16: "closed, fault" };
   var READ = [];
   function buildReadoutDefs() {
     var r = [["Time", function (i) { return clock(C.t[i]); }]];
@@ -319,15 +311,12 @@
     add("rpm", "RPM", "", 0);
     add("vss", "Speed", "km/h", 0);
     add("maf", "MAF", "g/s", 2);
-    add("tps", "Throttle", "%", 1);
     add("ect", "Coolant", "°C", 0);
     add("iat", "Intake air", "°C", 0);
     if (HAVE.tt1) r.push([HAVE.tt2 ? "Trim B1" : "Trim", function (i) { return sgn(C.tt1[i], 1) + " %"; }]);
     if (HAVE.tt2) r.push(["Trim B2", function (i) { return sgn(C.tt2[i], 1) + " %"; }]);
     if (HAVE.lam1) r.push(["λ", function (i) { return fmt(C.lam1[i], 3); }]);
     add("spark", "Advance", "°", 1);
-    add("volt", "Voltage", "V", 2);
-    if (HAVE.fs1) r.push(["Fuel sys", function (i) { return C.fs1[i] == null ? "—" : (FS_NAMES[C.fs1[i]] || String(C.fs1[i])); }]);
     r.push(["State", function (i) { return ST[i] === "other" ? "transition" : ST[i]; }]);
     READ = r;
     var host = document.getElementById("readout");

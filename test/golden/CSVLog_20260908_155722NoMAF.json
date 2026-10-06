@@ -6,7 +6,6 @@
     "vss": true,
     "load": true,
     "aload": true,
-    "tps": true,
     "spark": true,
     "ect": true,
     "iat": true,
@@ -16,9 +15,6 @@
     "ltft2": true,
     "lam1": true,
     "lam2": true,
-    "o2b1s2": true,
-    "o2b2s2": true,
-    "fs1": true,
     "tt1": true,
     "tt2": true,
     "lean": true,
@@ -39,12 +35,6 @@
   },
   "findings": [
     {
-      "id": "cat",
-      "sev": "serious",
-      "tag": "Catalyst",
-      "h": "Post-catalyst sensors are swinging"
-    },
-    {
       "id": "load-dep",
       "sev": "warning",
       "tag": "Load dependence",
@@ -54,7 +44,7 @@
       "id": "rich-excursion",
       "sev": "warning",
       "tag": "Fuel trim",
-      "h": "Worst rich excursion: -20.3 %"
+      "h": "Worst rich excursion: -21.9 %, sustained 15 s"
     },
     {
       "id": "trim-level",
@@ -72,7 +62,7 @@
       "id": "coverage",
       "sev": "neutral",
       "tag": "Coverage",
-      "h": "2 diagnostic channels missing from this log"
+      "h": "1 diagnostic channel missing from this log"
     },
     {
       "id": "bank-balance",
@@ -106,16 +96,15 @@
       "dt": 1.0009999999999764,
       "repeatRun": 4
     },
+    "rpmInfo": {
+      "idleMedian": 849,
+      "idleSd": 212.67156869100307,
+      "idleN": 191,
+      "dips": 0,
+      "stalls": 0,
+      "lowest": null
+    },
     "unitsConverted": false,
-    "skippedRules": [
-      {
-        "id": "volt",
-        "missing": "volt"
-      },
-      {
-        "id": "gps-precision",
-        "missing": "lat"
-      }
-    ]
+    "skippedRules": []
   }
 }

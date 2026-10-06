@@ -1,0 +1,113 @@
+{
+  "error": null,
+  "have": {
+    "t": true,
+    "rpm": true,
+    "load": true,
+    "maf": true,
+    "ect": true,
+    "iat": true,
+    "stft1": true,
+    "ltft1": true,
+    "stft2": true,
+    "ltft2": true,
+    "lam1": true,
+    "lam2": true,
+    "tt1": true,
+    "tt2": true,
+    "lean": true,
+    "dt": true
+  },
+  "report": {
+    "delim": ",",
+    "headerLine": 2,
+    "columns": 12,
+    "rows": 2004,
+    "skipped": 0,
+    "ragged": 0,
+    "decComma": false,
+    "preamble": [
+      "# StartTime = 10/06/2026 08:47:50.0569 AM"
+    ],
+    "warnings": []
+  },
+  "findings": [
+    {
+      "id": "trim-level",
+      "sev": "warning",
+      "tag": "Fuel trim",
+      "h": "Engine running rich, ECU pulling fuel to compensate"
+    },
+    {
+      "id": "load-dep",
+      "sev": "warning",
+      "tag": "Load dependence",
+      "h": "Lean gets worse as airflow rises"
+    },
+    {
+      "id": "rich-excursion",
+      "sev": "warning",
+      "tag": "Fuel trim",
+      "h": "Worst rich excursion: -27.3 %, sustained 150 s"
+    },
+    {
+      "id": "coverage",
+      "sev": "neutral",
+      "tag": "Coverage",
+      "h": "1 diagnostic channel missing from this log"
+    },
+    {
+      "id": "bank-balance",
+      "sev": "good",
+      "tag": "Bank balance",
+      "h": "Both banks are corrected by the same amount"
+    },
+    {
+      "id": "iat",
+      "sev": "good",
+      "tag": "Intake air",
+      "h": "Intake air stays cool"
+    },
+    {
+      "id": "ect",
+      "sev": "good",
+      "tag": "Cooling",
+      "h": "Coolant temperature stayed normal"
+    },
+    {
+      "id": "gaps",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "Clean capture at 1.00 s per frame"
+    }
+  ],
+  "metrics": {
+    "iatSlope": {
+      "slope": -0.009877578062311208,
+      "r": -0.03784957794474397,
+      "n": 989,
+      "iatLo": -40,
+      "iatHi": 30
+    },
+    "iatSlopeReason": null,
+    "cadence": {
+      "dt": 1.0009999999999764,
+      "repeatRun": 5
+    },
+    "rpmInfo": {
+      "idleMedian": 701,
+      "idleSd": 133.4035582514937,
+      "idleN": 989,
+      "dips": 5,
+      "stalls": 2,
+      "lowest": 0
+    },
+    "unitsConverted": false,
+    "skippedRules": [
+      {
+        "id": "ratio",
+        "missing": "vss"
+      }
+    ]
+  }
+}

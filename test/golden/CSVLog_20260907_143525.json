@@ -5,7 +5,6 @@
     "rpm": true,
     "vss": true,
     "load": true,
-    "tps": true,
     "maf": true,
     "spark": true,
     "ect": true,
@@ -16,9 +15,6 @@
     "ltft2": true,
     "lam1": true,
     "lam2": true,
-    "o2b1s2": true,
-    "o2b2s2": true,
-    "fs1": true,
     "tt1": true,
     "tt2": true,
     "lean": true,
@@ -39,12 +35,6 @@
   },
   "findings": [
     {
-      "id": "cat",
-      "sev": "serious",
-      "tag": "Catalyst",
-      "h": "Post-catalyst sensors are swinging"
-    },
-    {
       "id": "trim-level",
       "sev": "warning",
       "tag": "Fuel trim",
@@ -52,9 +42,9 @@
     },
     {
       "id": "load-dep",
-      "sev": "warning",
+      "sev": "neutral",
       "tag": "Load dependence",
-      "h": "Lean gets worse the less air the engine is moving"
+      "h": "Correction is flat across load"
     },
     {
       "id": "iat",
@@ -73,12 +63,6 @@
       "sev": "neutral",
       "tag": "Fuel trim",
       "h": "Worst rich excursion: -18.8 %"
-    },
-    {
-      "id": "coverage",
-      "sev": "neutral",
-      "tag": "Coverage",
-      "h": "1 diagnostic channel missing from this log"
     },
     {
       "id": "bank-balance",
@@ -101,10 +85,10 @@
   ],
   "metrics": {
     "iatSlope": {
-      "slope": 0.04260532527084286,
-      "r": 0.06386987514734703,
-      "n": 428,
-      "iatLo": 45,
+      "slope": 0.09001667775804954,
+      "r": 0.12496061238367291,
+      "n": 149,
+      "iatLo": 48,
       "iatHi": 80
     },
     "iatSlopeReason": null,
@@ -112,16 +96,15 @@
       "dt": 3.663000000000011,
       "repeatRun": 1
     },
+    "rpmInfo": {
+      "idleMedian": 707,
+      "idleSd": 96.99827418702598,
+      "idleN": 149,
+      "dips": 0,
+      "stalls": 0,
+      "lowest": null
+    },
     "unitsConverted": false,
-    "skippedRules": [
-      {
-        "id": "volt",
-        "missing": "volt"
-      },
-      {
-        "id": "gps-precision",
-        "missing": "lat"
-      }
-    ]
+    "skippedRules": []
   }
 }

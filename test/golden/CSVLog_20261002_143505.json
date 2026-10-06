@@ -48,7 +48,7 @@
       "id": "coverage",
       "sev": "neutral",
       "tag": "Coverage",
-      "h": "3 diagnostic channels missing from this log"
+      "h": "1 diagnostic channel missing from this log"
     },
     {
       "id": "trim-level",
@@ -94,23 +94,19 @@
       "dt": 1.0009999999999764,
       "repeatRun": 2
     },
+    "rpmInfo": {
+      "idleMedian": 706,
+      "idleSd": 115.5616634100706,
+      "idleN": 738,
+      "dips": 0,
+      "stalls": 0,
+      "lowest": null
+    },
     "unitsConverted": false,
     "skippedRules": [
       {
-        "id": "cat",
-        "missing": "o2b1s2"
-      },
-      {
-        "id": "volt",
-        "missing": "volt"
-      },
-      {
         "id": "ratio",
         "missing": "vss"
-      },
-      {
-        "id": "gps-precision",
-        "missing": "lat"
       }
     ]
   }

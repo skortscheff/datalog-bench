@@ -48,6 +48,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS logs (
   raw TEXT NOT NULL
 )`);
 
+// Older databases predate the free-text note column; add it in place.
+if (!db.prepare("PRAGMA table_info(logs)").all().some((c) => c.name === "note")) {
+  db.exec("ALTER TABLE logs ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+}
+const MAX_NOTE_CHARS = 500;
+
 function summarize(text, name) {
   const L = parseLog(text, name, false);
   if (L.error) return { error: L.error };
@@ -114,7 +120,7 @@ function attachmentHeader(name) {
 
 function rowOut(r) {
   return { id: r.id, name: r.name, uploadedAt: r.uploaded_at, rows: r.rows,
-           sessionStart: r.session_start, headline: r.headline, severity: r.severity };
+           sessionStart: r.session_start, headline: r.headline, severity: r.severity, note: r.note || "" };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -158,7 +164,7 @@ const server = http.createServer(async (req, res) => {
 
     if (p === "/logs" && req.method === "GET") {
       const rows = db.prepare(
-        "SELECT id,name,uploaded_at,rows,session_start,headline,severity FROM logs"
+        "SELECT id,name,uploaded_at,rows,session_start,headline,severity,note FROM logs"
       ).all();
       // Sort by the drive's own recorded start time, not upload order — a log
       // opened out of sequence (re-adding an older fixture, backfilling a
@@ -177,7 +183,19 @@ const server = http.createServer(async (req, res) => {
 
     const del = p.match(/^\/logs\/(\d+)$/);
     if (del) {
-      if (req.method !== "DELETE") return notAllowed("DELETE");
+      if (req.method === "PATCH") {
+        const body = await readBody(req);
+        let parsed;
+        try { parsed = JSON.parse(body.toString("utf8")); } catch { return send(res, 400, { error: "invalid JSON" }); }
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed) || typeof parsed.note !== "string") {
+          return send(res, 400, { error: "body must be an object with a string note" });
+        }
+        const note = parsed.note.replace(/[\x00-\x1f\x7f]/g, " ").toWellFormed().trim().slice(0, MAX_NOTE_CHARS);
+        const info = db.prepare("UPDATE logs SET note = ? WHERE id = ?").run(note, Number(del[1]));
+        if (!info.changes) return send(res, 404, { error: "not found" });
+        return send(res, 200, { id: Number(del[1]), note });
+      }
+      if (req.method !== "DELETE") return notAllowed("DELETE", "PATCH");
       const info = db.prepare("DELETE FROM logs WHERE id = ?").run(Number(del[1]));
       if (!info.changes) return send(res, 404, { error: "not found" });
       return send(res, 200, { deleted: true });

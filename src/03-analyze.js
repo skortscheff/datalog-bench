@@ -222,61 +222,12 @@
           ev: ev };
       } },
 
-    /* ---------------- post-catalyst oxygen sensors ---------------- */
-    { id: "cat", need: ["o2b1s2"],
-      run: function (x) {
-        var idx = x.trimFrames.length > 20 ? x.trimFrames : x.all;
-        var v = at(x.C.o2b1s2, idx), s = sd(v);
-        if (s == null) return null;
-        var lo = 0, hi = 0, i;
-        for (i = 0; i < v.length; i++) { if (v[i] == null) continue; if (v[i] < 0.2) lo++; if (v[i] > 0.7) hi++; }
-        var ev = [["B1S2 σ", n1(s, 3) + " V"], ["under 0.2 V", String(lo)], ["over 0.7 V", String(hi)]];
-        var s2 = null;
-        if (x.have.o2b2s2) { s2 = sd(at(x.C.o2b2s2, idx)); if (s2 != null) ev.splice(1, 0, ["B2S2 σ", n1(s2, 3) + " V"]); }
-        var worst = Math.max(s, s2 == null ? 0 : s2);
-        var dtm = med(x.C.dt), coarse = dtm != null && dtm > 1.5;
-        if (worst < 0.09) return { sev: "good", tag: "Catalyst",
-          h: "Post-catalyst sensors are steady",
-          p: "The rear oxygen sensor" + (s2 != null ? "s hold" : " holds") + " a standard deviation of " + n1(s, 3) + " V" +
-             (s2 != null ? " and " + n1(s2, 3) + " V" : "") + " — flat, which is what a converter that is still doing its job looks like.",
-          ev: ev };
-        return { sev: worst >= 0.16 ? "serious" : "neutral", tag: "Catalyst",
-          h: "Post-catalyst sensor" + (s2 != null ? "s are" : " is") + " swinging",
-          p: "The rear sensor" + (s2 != null ? "s run" : " runs") + " σ ≈ " + n1(worst, 2) + " V, with " + lo +
-             " frames below 0.2 V and " + hi + " above 0.7 V. A healthy converter buffers the front sensor's switching into a comparatively flat rear signal, so wide swings suggest reduced conversion efficiency." +
-             (coarse ? " Treat this as a hint, not a verdict: at a " + n1(dtm, 1) + " s sample interval the log aliases the real switching rate. Re-log at 1 s or faster to judge it." : ""),
-          ev: ev };
-      } },
-
-    /* ---------------- charging system ---------------- */
-    { id: "volt", need: ["volt", "rpm"],
-      run: function (x) {
-        var run = [], i;
-        for (i = 0; i < x.n; i++) if (x.C.rpm[i] > 400 && x.C.volt[i] != null) run.push(i);
-        if (run.length < 15) return null;
-        var mdn = med(at(x.C.volt, run)), lo = pct(at(x.C.volt, run), 0.02);
-        var ev = [["running median", n1(mdn, 2) + " V"], ["2nd pct", n1(lo, 2) + " V"]];
-        if (mdn < 12.9) return { sev: mdn < 12.4 ? "serious" : "warning", tag: "Charging",
-          h: "Charging voltage is low at " + n1(mdn, 2) + " V",
-          p: "With the engine turning, module voltage holds a median of " + n1(mdn, 2) +
-             " V, below the 13.5–14.5 V a healthy alternator maintains. Low system voltage also slows injector and coil response, which can distort the fuel-trim numbers above. Test the alternator output and the battery's main grounds.",
-          ev: ev };
-        if (mdn > 15.1) return { sev: "warning", tag: "Charging",
-          h: "Charging voltage is high at " + n1(mdn, 2) + " V",
-          p: "Running voltage medians " + n1(mdn, 2) + " V, above the usual regulated ceiling. Overcharging cooks batteries and stresses electronics; check the voltage regulator.",
-          ev: ev };
-        return { sev: "good", tag: "Charging",
-          h: "Charging system looks healthy",
-          p: "Module voltage medians " + n1(mdn, 2) + " V with the engine running and never drops below " + n1(lo, 2) + " V — a normal regulated range.",
-          ev: ev };
-      } },
-
     /* ---------------- log quality ---------------- */
     { id: "gaps", need: ["t"],
       run: function (x) {
         if (x.noTime) return { sev: "warning", tag: "Log quality",
           h: "No time column, so every rate in this log is unverified",
-          p: "The parser found no elapsed-time or timestamp column, so the x axis counts frames rather than seconds. Everything shaped by time — sample interval, warm-up duration, the rate the rear oxygen sensors switch — cannot be judged from this file. Re-export with a time column if you need those.",
+          p: "The parser found no elapsed-time or timestamp column, so the x axis counts frames rather than seconds. Everything shaped by time — sample interval, warm-up duration, how quickly a trim recovers — cannot be judged from this file. Re-export with a time column if you need those.",
           ev: [["frames", String(x.n)]] };
         var dtm = med(x.C.dt);
         if (dtm == null || dtm <= 0) return null;
@@ -373,7 +324,6 @@
         var ev = [["worst", sg(worstVal, 1) + " %"], ["frames in excursion", String(hi - lo + 1)]];
         if (dur != null) ev.push(["duration", n1(Math.max(dur, 0), 0) + " s"]);
         if (!x.noTime) ev.push(["at", Math.round(x.C.t[peakI]) + " s"]);
-        if (x.have.tps) ev.push(["throttle then", n1(x.C.tps[peakI], 0) + " %"]);
         if (x.have.rpm) ev.push(["rpm then", n1(x.C.rpm[peakI], 0)]);
         if (x.have.iat) ev.push(["IAT then", n1(x.C.iat[peakI], 0) + " °C"]);
 
@@ -386,51 +336,9 @@
           h: "Worst rich excursion: " + sg(worstVal, 1) + " %" + (dur != null && dur >= 5 ? ", sustained " + n1(dur, 0) + " s" : ""),
           p: "The deepest rich correction in this log is " + sg(worstVal, 1) + " %" +
              (!x.noTime ? ", at " + Math.round(x.C.t[peakI]) + " s in" : "") +
-             (x.have.tps ? " (throttle " + n1(x.C.tps[peakI], 0) + " %" : "") +
-             (x.have.rpm ? (x.have.tps ? ", " : " (") + n1(x.C.rpm[peakI], 0) + " rpm" : "") +
-             (x.have.tps || x.have.rpm ? ")" : "") +
+             (x.have.rpm ? " (" + n1(x.C.rpm[peakI], 0) + " rpm)" : "") +
              (dur != null && dur >= 5 ? ". Trim stayed at least half this deep for " + n1(dur, 0) + " s (" + (hi - lo + 1) + " frames) around that point" : "") +
              ". A single deep frame like this is usually a transient — an acceleration enrichment spike, a decel-fuel-cutoff re-entry, a cold-start or EVAP-purge event settling out — rather than a fixed fault; the trim-level and load-dependence checks are the ones to trust for a sustained problem.",
-          ev: ev };
-      } },
-
-    /* ---------------- GPS fix precision ---------------- */
-    { id: "gps-precision", need: ["lat", "lon"],
-      run: function (x) {
-        var idx = [], i;
-        for (i = 0; i < x.n; i++) if (x.C.lat[i] != null && x.C.lat[i] !== 0 && x.C.lon[i] != null && x.C.lon[i] !== 0) idx.push(i);
-        if (idx.length < 20) return null;
-
-        function quantFrac(col, step) {
-          var n = 0, snapped = 0, k, v, scaled;
-          for (k = 0; k < idx.length; k++) {
-            v = col[idx[k]];
-            if (v == null) continue;
-            n++;
-            scaled = v / step;
-            if (Math.abs(scaled - Math.round(scaled)) < 1e-6) snapped++;
-          }
-          return n ? snapped / n : 0;
-        }
-        var latFrac = quantFrac(x.C.lat, 0.01), lonFrac = quantFrac(x.C.lon, 0.01);
-        var distinctLat = {}, distinctLon = {}, k2;
-        for (k2 = 0; k2 < idx.length; k2++) { distinctLat[x.C.lat[idx[k2]]] = 1; distinctLon[x.C.lon[idx[k2]]] = 1; }
-        var nLat = Object.keys(distinctLat).length, nLon = Object.keys(distinctLon).length;
-        var ev = [["fixes", String(idx.length)], ["distinct latitudes", String(nLat)], ["distinct longitudes", String(nLon)]];
-
-        if (latFrac >= 0.9 && lonFrac >= 0.9) {
-          return { sev: "warning", tag: "Log quality",
-            h: "GPS is rounded to about 1 km, not a real track",
-            p: "This log's " + idx.length + " GPS fixes take only " + nLat + " distinct latitude and " + nLon +
-               " distinct longitude values, snapped to a 0.01° (roughly 1.1 km) grid instead of the usual six-decimal, sub-10-metre fixes. " +
-               "The map will draw a blocky, zig-zagging route instead of the real one, and anything computed from GPS position or speed is unusable for this log — treat it as missing, not just imprecise. " +
-               "This is a logger-side issue, not this app: on a phone it is usually the OBD app's location permission having dropped from full/precise to approximate. Check that setting before your next drive.",
-            ev: ev };
-        }
-        return { sev: "good", tag: "Log quality",
-          h: "GPS fixes are full precision",
-          p: "Latitude and longitude carry " + nLat + " and " + nLon + " distinct values across " + idx.length +
-             " fixes — real track resolution, so the map and any GPS-derived checks can be trusted for this log.",
           ev: ev };
       } },
 
@@ -439,7 +347,7 @@
       run: function (x) {
         var want = [["rpm", "engine speed"], ["vss", "vehicle speed"], ["ect", "coolant temperature"],
                     ["iat", "intake air temperature"], ["maf", "mass air flow"], ["stft1", "short-term fuel trim"],
-                    ["ltft1", "long-term fuel trim"], ["o2b1s2", "post-catalyst oxygen"], ["volt", "module voltage"]];
+                    ["ltft1", "long-term fuel trim"]];
         var miss = [];
         for (var i = 0; i < want.length; i++) if (!x.have[want[i][0]]) miss.push(want[i][1]);
         if (!miss.length) return null;
@@ -476,6 +384,32 @@
     }
     for (k in counts) if (counts[k] > bestN) { bestN = counts[k]; best = +k; }
     return best;
+  }
+
+  /* engine-speed stability over a set of frame indexes. A dip is a stretch of
+     frames under RPM_DIP_BELOW that begins after the engine was first seen
+     running; a stall is a dip that reaches RPM_STALL_BELOW. Cranking at the start
+     and the key-off tail (a dip that runs to the last frame of the log) are not
+     counted. Channels refresh slowly, so a dip shorter than one refresh can be
+     missed: these are minimum counts. */
+  var RPM_RAN_ABOVE = 600, RPM_DIP_BELOW = 450, RPM_STALL_BELOW = 100;
+  function rpmStability(L, idx) {
+    var rpm = L.cols.rpm, last = L.n - 1, first = -1, i;
+    for (i = 0; i <= last; i++) if (rpm[i] != null && rpm[i] >= RPM_RAN_ABOVE) { first = i; break; }
+    var dips = 0, stalls = 0, lowest = null, cur = null, k, v;
+    function close(endsLog) {
+      if (cur == null) return;
+      if (!endsLog) { dips++; if (cur < RPM_STALL_BELOW) stalls++; if (lowest == null || cur < lowest) lowest = cur; }
+      cur = null;
+    }
+    for (k = 0; k < idx.length; k++) {
+      i = idx[k]; v = rpm[i];
+      if (v == null || first < 0 || i < first) continue;
+      if (v < RPM_DIP_BELOW) cur = cur == null ? v : Math.min(cur, v);
+      else close(false);
+    }
+    close(idx.length > 0 && idx[idx.length - 1] === last);
+    return { dips: dips, stalls: stalls, lowest: lowest };
   }
 
   var IAT_SLOPE_MIN_FRAMES = 30, IAT_SLOPE_MIN_RANGE = 8;
@@ -516,8 +450,18 @@
       repeatRun: runs.length ? med(runs) : null
     };
 
+    /* idle speed and stalls, over warm idle frames and the whole log respectively */
+    var rpmInfo = null;
+    if (L.have.rpm) {
+      var idleR = ctx.byState.idle.filter(function (j) { return !L.have.ect || C.ect[j] > 70; });
+      var rv = []; for (i = 0; i < idleR.length; i++) if (C.rpm[idleR[i]] != null) rv.push(C.rpm[idleR[i]]);
+      var st = rpmStability(L, ctx.all);
+      rpmInfo = { idleMedian: med(rv), idleSd: rv.length > 1 ? sd(rv) : null, idleN: rv.length,
+                  dips: st.dips, stalls: st.stalls, lowest: st.lowest };
+    }
+
     var converted = (L.unitWarnings || []).some(function (w) { return /has been converted/.test(w); });
-    return { iatSlope: iatSlope, iatSlopeReason: iatReason, cadence: cadence,
+    return { iatSlope: iatSlope, iatSlopeReason: iatReason, cadence: cadence, rpmInfo: rpmInfo,
              unitsConverted: converted, skippedRules: skipped };
   }
 
@@ -532,13 +476,6 @@
     var warm = [];
     for (i = 0; i < n; i++) if (!C.ect || C.ect[i] > 70) warm.push(i);
     var trimFrames = warm, trimLabel = C.ect ? "warm" : "logged";
-    if (L.closedLoop) {
-      var set = {}, j;
-      for (j = 0; j < L.closedLoop.length; j++) set[L.closedLoop[j]] = 1;
-      var cl = [];
-      for (j = 0; j < warm.length; j++) if (set[warm[j]]) cl.push(warm[j]);
-      if (cl.length > 12) { trimFrames = cl; trimLabel = C.ect ? "warm closed-loop" : "closed-loop"; }
-    }
     if (trimFrames.length < 12) { trimFrames = all; trimLabel = "logged"; }
 
     var ctx = { L: L, C: C, n: n, all: all, byState: byState, have: L.have,

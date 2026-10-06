@@ -5,7 +5,6 @@
     "rpm": true,
     "vss": true,
     "load": true,
-    "tps": true,
     "maf": true,
     "spark": true,
     "ect": true,
@@ -16,9 +15,6 @@
     "ltft2": true,
     "lam1": true,
     "lam2": true,
-    "o2b1s2": true,
-    "o2b2s2": true,
-    "fs1": true,
     "tt1": true,
     "tt2": true,
     "lean": true,
@@ -39,28 +35,22 @@
   },
   "findings": [
     {
-      "id": "cat",
-      "sev": "serious",
-      "tag": "Catalyst",
-      "h": "Post-catalyst sensors are swinging"
-    },
-    {
       "id": "trim-level",
       "sev": "warning",
       "tag": "Fuel trim",
       "h": "Engine running lean, ECU adding fuel to compensate"
     },
     {
-      "id": "load-dep",
-      "sev": "warning",
-      "tag": "Load dependence",
-      "h": "Lean gets worse the less air the engine is moving"
-    },
-    {
       "id": "gaps",
       "sev": "warning",
       "tag": "Log quality",
       "h": "14 sampling gaps in the capture"
+    },
+    {
+      "id": "load-dep",
+      "sev": "neutral",
+      "tag": "Load dependence",
+      "h": "Correction is flat across load"
     },
     {
       "id": "iat",
@@ -78,13 +68,7 @@
       "id": "rich-excursion",
       "sev": "neutral",
       "tag": "Fuel trim",
-      "h": "Worst rich excursion: -9.4 %"
-    },
-    {
-      "id": "coverage",
-      "sev": "neutral",
-      "tag": "Coverage",
-      "h": "1 diagnostic channel missing from this log"
+      "h": "Worst rich excursion: -12.5 %"
     },
     {
       "id": "bank-balance",
@@ -101,9 +85,9 @@
   ],
   "metrics": {
     "iatSlope": {
-      "slope": 0.0444301947594276,
-      "r": 0.14786254497161,
-      "n": 477,
+      "slope": 0.05365448312649323,
+      "r": 0.19777166902761728,
+      "n": 165,
       "iatLo": 27,
       "iatHi": 84
     },
@@ -112,16 +96,15 @@
       "dt": 4.073000000000013,
       "repeatRun": 1
     },
+    "rpmInfo": {
+      "idleMedian": 706,
+      "idleSd": 158.7202916534392,
+      "idleN": 165,
+      "dips": 0,
+      "stalls": 0,
+      "lowest": null
+    },
     "unitsConverted": false,
-    "skippedRules": [
-      {
-        "id": "volt",
-        "missing": "volt"
-      },
-      {
-        "id": "gps-precision",
-        "missing": "lat"
-      }
-    ]
+    "skippedRules": []
   }
 }

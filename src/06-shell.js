@@ -1,6 +1,12 @@
   /* ==========================================================
      KPIs — the first six that this log can actually support
      ========================================================== */
+  /* Idle-speed spread (rpm, standard deviation) above which the tile says
+     "hunting". Without a road-speed channel, "idle" also takes in coasting and
+     the fall back to idle after a lift-off, so a healthy warm idle measures
+     about 140-180 rpm here. 250 rpm is a surge a driver would clearly notice. */
+  var IDLE_HUNT_SD = 250;
+
   function drawKpis() {
     var host = document.getElementById("kpis");
     host.textContent = "";
@@ -9,12 +15,7 @@
     function peak(k) { var b = null, i, v; for (i = 0; i < sel.length; i++) { v = C[k][sel[i]]; if (v != null && isFinite(v) && (b == null || v > b)) b = v; } return b; }
 
     var trimSel = sel;
-    if (L.closedLoop) {
-      var s2 = {}, j;
-      for (j = 0; j < L.closedLoop.length; j++) s2[L.closedLoop[j]] = 1;
-      var cl = sel.filter(function (i) { return s2[i] && (!HAVE.ect || C.ect[i] > 70); });
-      if (cl.length > 8) trimSel = cl;
-    } else if (HAVE.ect) {
+    if (HAVE.ect) {
       var wq = sel.filter(function (i) { return C.ect[i] > 70; });
       if (wq.length > 8) trimSel = wq;
     }
@@ -39,20 +40,21 @@
         chip: sev(a, 70, 95), lab: a == null ? "no data" : a >= 95 ? "very hot" : a >= 70 ? "hot" : "normal" }); }
     if (HAVE.rpm) { var r = peak("rpm");
       cand.push({ k: "Peak engine speed", v: fmt(r, 0), u: "rpm", sub: "highest in window", chip: "neutral", lab: "logged" }); }
+    if (HAVE.rpm) {
+      var idleSel = sel.filter(function (i) { return ST[i] === "idle" && (!HAVE.ect || C.ect[i] > 70); });
+      var iv = pick(C.rpm, idleSel).filter(function (x) { return x != null; });
+      if (iv.length >= 8) {
+        var isd = Math.sqrt(iv.reduce(function (a, x) { var d = x - medOf(iv); return a + d * d; }, 0) / iv.length);
+        cand.push({ k: "Idle speed", v: fmt(medOf(iv), 0), u: "rpm", sub: "spread " + fmt(isd, 0) + " rpm, " + iv.length + " frames",
+          chip: isd > IDLE_HUNT_SD ? "warning" : "good", lab: isd > IDLE_HUNT_SD ? "hunting" : "steady" });
+      }
+      var rs = rpmStability(L, sel);
+      cand.push({ k: "Stalls", v: String(rs.stalls), u: "", sub: rs.dips + " dip" + (rs.dips === 1 ? "" : "s") + " under 450 rpm" + (rs.lowest != null ? ", lowest " + Math.round(rs.lowest) : ""),
+        chip: rs.stalls ? "critical" : rs.dips ? "warning" : "good",
+        lab: rs.stalls ? "engine stopped" : rs.dips ? "near stall" : "none seen" });
+    }
     if (HAVE.vss) { var s = peak("vss");
       cand.push({ k: "Peak road speed", v: fmt(s, 0), u: "km/h", sub: "highest in window", chip: "neutral", lab: "logged" }); }
-    if (HAVE.fs1) {
-      var run = sel.filter(function (i) { return !HAVE.ect || C.ect[i] > 70; });
-      var clc = run.filter(function (i) { return C.fs1[i] === 2 || C.fs1[i] === 16; });
-      var share = run.length ? clc.length / run.length : null;
-      cand.push({ k: "Closed loop", v: share == null ? "—" : (share * 100).toFixed(0), u: "%", sub: "of warm frames",
-        chip: share == null ? "neutral" : share > 0.8 ? "good" : "warning",
-        lab: share == null ? "no data" : share > 0.8 ? "fuelling in control" : "mostly open loop" });
-    }
-    if (HAVE.volt) { var vv = medOf(pick(C.volt, sel));
-      cand.push({ k: "Module voltage", v: fmt(vv, 2), u: "V", sub: "median",
-        chip: vv == null ? "neutral" : (vv < 12.9 || vv > 15.1) ? "warning" : "good",
-        lab: vv == null ? "no data" : vv < 12.9 ? "low" : vv > 15.1 ? "high" : "normal" }); }
     if (!L.noTime) {
       var dtm = medOf(pick(C.dt, sel)), thr = dtm ? Math.max(dtm * 3, dtm + 1) : Infinity;
       var gaps = sel.filter(function (i) { return C.dt[i] != null && C.dt[i] > thr; }).length;
@@ -73,14 +75,22 @@
       var v = el("span", "v"); v.textContent = it.v;
       if (it.u) { var sm = el("small"); sm.textContent = " " + it.u; v.appendChild(sm); }
       d.appendChild(v);
-      var c = el("span", "chip " + it.chip);
-      c.appendChild(el("i", "dot")); c.appendChild(el("span", null, it.lab));
-      d.appendChild(c);
-      d.appendChild(el("span", "sub", it.sub));
+      if (it.chip !== "neutral") {
+        var c = el("span", "chip " + it.chip);
+        c.appendChild(el("i", "dot")); c.appendChild(el("span", null, it.lab));
+        d.appendChild(c);
+      }
+      if (it.sub) d.appendChild(el("span", "sub", it.sub));
       host.appendChild(d);
     });
-    /* pad the last row so the hairline background doesn't show through gaps */
-    for (var padN = (cols - tiles.length % cols) % cols; padN > 0; padN--) host.appendChild(el("div", "kpi"));
+    /* stretch the tiles of a short last row across the full width, so no empty
+       cell shows the hairline background and no gap is left at the end */
+    var lastN = tiles.length % cols;
+    if (lastN) {
+      var kids = host.children, base = Math.floor(cols / lastN), extra = cols % lastN;
+      for (var ti = 0; ti < lastN; ti++)
+        kids[tiles.length - lastN + ti].style.gridColumn = "span " + (base + (ti < extra ? 1 : 0));
+    }
 
     /* session summary: frame count and duration in window */
     var vl = document.getElementById("verdict-line");
@@ -513,6 +523,16 @@
     });
   }
 
+  /* "10/06/2026 02:33:24.1554 PM" -> "6 Oct 2026, 14:33" */
+  function niceTime(s) {
+    if (!s) return null;
+    var t = Date.parse(String(s).replace(/(\d{2}:\d{2}:\d{2})\.\d+/, "$1"));
+    if (isNaN(t)) return s;
+    var d = new Date(t);
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + ", " +
+      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
+
   function loadHistoryList() {
     var tb = document.getElementById("history-tbl").tBodies[0], note = document.getElementById("history-note");
     note.textContent = "Loading…";
@@ -543,7 +563,7 @@
                 note.textContent = "Up to " + CMP_MAX + " at a time — uncheck one first.";
                 return;
               }
-              CMP_SEL[row.id] = { id: row.id, name: row.name };
+              CMP_SEL[row.id] = { id: row.id, name: row.name, note: row.note };
             } else {
               delete CMP_SEL[row.id];
             }
@@ -553,13 +573,30 @@
           tr.appendChild(tdc);
 
           tr.appendChild(el("td", "nm", row.name));
-          tr.appendChild(el("td", "u", row.sessionStart || new Date(row.uploadedAt).toLocaleString()));
-          tr.appendChild(el("td", "u", String(row.rows)));
+          tr.appendChild(el("td", "when", niceTime(row.sessionStart) || new Date(row.uploadedAt).toLocaleString()));
+          tr.appendChild(el("td", "num", String(row.rows)));
+          var tdn = el("td", "note-cell", row.note || "");
+          tr.appendChild(tdn);
           var td = document.createElement("td");
           td.innerHTML = sevChip(row.severity || "neutral") + " " + esc(row.headline || "");
           tr.appendChild(td);
-          var tdd = document.createElement("td");
-          var del = el("button", "btn ghost", "Delete");
+          var tdd = el("td", "acts");
+          var ed = el("button", "btn ghost", row.note ? "Edit note" : "Add note");
+          ed.type = "button";
+          ed.setAttribute("aria-label", "Edit note for " + row.name);
+          ed.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+            var nv = window.prompt("Note for “" + row.name + "” (for example: AC on, used OEM MAF fitted). Leave empty to clear.", row.note || "");
+            if (nv == null) return;
+            fetch("/api/logs/" + row.id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note: nv }) })
+              .then(apiJson).then(function (res3) {
+                if (!res3.ok) { note.textContent = "Could not save the note: " + (res3.body.error || "server error") + "."; return; }
+                loadHistoryList();
+              }).catch(function () { note.textContent = "Could not reach the history database."; });
+          });
+          ed.addEventListener("keydown", function (ev) { ev.stopPropagation(); });
+          tdd.appendChild(ed);
+          var del = el("button", "btn ghost danger", "Delete");
           del.type = "button";
           del.setAttribute("aria-label", "Delete " + row.name + " from history");
           del.addEventListener("click", function (ev) {
@@ -596,28 +633,16 @@
     return line ? line.replace(/^#\s*StartTime\s*=\s*/, "") : null;
   }
 
-  function compareMetrics(L, name) {
+  function compareMetrics(L, name, note) {
     var ctx = L.ctx, C = L.cols;
     var idle = ctx.byState.idle, drive = ctx.byState.driving;
-    /* mirrors drawKpis' own closed-loop share exactly, rather than reusing
-       L.closedLoop — that's null whenever no frame ever hit closed loop,
-       even if the fs1 channel itself is present */
-    var closedLoopPct = null;
-    if (L.have.fs1) {
-      var run = ctx.all.filter(function (i) { return !L.have.ect || C.ect[i] > 70; });
-      var clCount = 0, ri;
-      for (ri = 0; ri < run.length; ri++) if (C.fs1[run[ri]] === 2 || C.fs1[run[ri]] === 16) clCount++;
-      closedLoopPct = run.length ? (clCount / run.length * 100) : null;
-    }
     return {
-      name: name, sessionStart: startTimeOf(L), rows: L.n,
-      closedLoopPct: closedLoopPct,
+      name: name, note: note || "", sessionStart: startTimeOf(L), rows: L.n,
       tt1Idle: L.have.tt1 ? medOf(pick(C.tt1, idle)) : null, tt1Drive: L.have.tt1 ? medOf(pick(C.tt1, drive)) : null,
       tt2Idle: L.have.tt2 ? medOf(pick(C.tt2, idle)) : null, tt2Drive: L.have.tt2 ? medOf(pick(C.tt2, drive)) : null,
       peakEct: L.have.ect ? maxOf(C.ect, ctx.all) : null, peakIat: L.have.iat ? maxOf(C.iat, ctx.all) : null,
-      volt: L.have.volt ? medOf(pick(C.volt, ctx.all)) : null,
       metrics: L.metrics,
-      channels: Object.keys(L.have).length, columns: L.head.length,
+      channels: Object.keys(L.mapping).length, columns: L.head.length,
     };
   }
 
@@ -626,16 +651,16 @@
     var note = document.getElementById("compare-note");
     note.textContent = "Loading…";
     show("compare-wrap", true); show("history-wrap", false);
-    Promise.all(sel.map(function (s) { return fetchRawLog(s.id).then(function (text) { return { text: text, name: s.name }; }); }))
+    Promise.all(sel.map(function (s) { return fetchRawLog(s.id).then(function (text) { return { text: text, name: s.name, note: s.note }; }); }))
       .then(function (loaded) {
         var cols = loaded.map(function (x) {
           var L = parseLog(x.text, x.name, false);
           if (L.error) return { name: x.name, error: L.error };
           analyze(L);
-          return compareMetrics(L, x.name);
+          return compareMetrics(L, x.name, x.note);
         });
         renderCompare(cols);
-        note.textContent = "Idle/driving trim and closed-loop share come from each log's own warm frames.";
+        note.textContent = "Idle and driving trim come from each log's own warm frames.";
       })
       .catch(function () { note.textContent = "Could not load the selected logs."; });
   }
@@ -647,7 +672,7 @@
     tr0.appendChild(document.createElement("th"));
     cols.forEach(function (c) {
       var th = document.createElement("th");
-      th.innerHTML = "<div>" + esc(c.name) + "</div><div class=\"u\">" + esc(c.sessionStart || "") + "</div>";
+      th.innerHTML = "<div>" + esc(c.name.replace(/\.csv$/i, "")) + "</div><div class=\"u\">" + esc(niceTime(c.sessionStart) || "") + "</div>";
       tr0.appendChild(th);
     });
     thead.appendChild(tr0);
@@ -683,8 +708,11 @@
     }
 
     grpRow("Session");
+    var tn = document.createElement("tr");
+    tn.appendChild(el("td", "mlab", "Note"));
+    cols.forEach(function (c) { tn.appendChild(el("td", "mval", c.note || "—")); });
+    tb.appendChild(tn);
     metricRow("Rows", function (c) { return c.rows; }, function (v) { return String(v); });
-    metricRow("Closed loop", function (c) { return c.closedLoopPct; }, function (v) { return v == null ? "—" : v.toFixed(0); }, "%");
 
     grpRow("Fuel trim (STFT+LTFT)");
     metricRow("Bank 1, idle", function (c) { return c.tt1Idle; }, sgn, "%");
@@ -700,6 +728,14 @@
     textRow("Intake air range", function (c) { var s = slopeCell(c); return s ? Math.round(s.iatLo) + "–" + Math.round(s.iatHi) + " °C" : "—"; });
     textRow("Not computed because", function (c) { return c.metrics.iatSlopeReason || "—"; });
 
+    grpRow("Engine speed");
+    function rpmCell(c, k) { return c.metrics && c.metrics.rpmInfo ? c.metrics.rpmInfo[k] : null; }
+    metricRow("Idle speed, median", function (c) { return rpmCell(c, "idleMedian"); }, function (v) { return fmt(v, 0); }, "rpm");
+    metricRow("Idle speed, spread (sd)", function (c) { return rpmCell(c, "idleSd"); }, function (v) { return fmt(v, 0); }, "rpm");
+    metricRow("Stalls", function (c) { return rpmCell(c, "stalls"); }, function (v) { return v == null ? "—" : String(v); });
+    metricRow("Dips under 450 rpm", function (c) { return rpmCell(c, "dips"); }, function (v) { return v == null ? "—" : String(v); });
+    metricRow("Lowest dip", function (c) { return rpmCell(c, "lowest"); }, function (v) { return v == null ? "none" : fmt(v, 0); }, "rpm");
+
     grpRow("Capture");
     metricRow("Row spacing", function (c) { return c.metrics && c.metrics.cadence.dt; }, function (v) { return fmt(v, 2); }, "s");
     metricRow("Repeated-value run", function (c) { return c.metrics && c.metrics.cadence.repeatRun; },
@@ -714,7 +750,6 @@
     grpRow("Other channels");
     metricRow("Peak coolant", function (c) { return c.peakEct; }, function (v) { return fmt(v, 0); }, "°C");
     metricRow("Peak intake air", function (c) { return c.peakIat; }, function (v) { return fmt(v, 0); }, "°C");
-    metricRow("Module voltage", function (c) { return c.volt; }, function (v) { return fmt(v, 2); }, "V");
   }
 
   document.getElementById("btn-compare").addEventListener("click", runCompare);

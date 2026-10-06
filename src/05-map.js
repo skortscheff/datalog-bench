@@ -424,36 +424,51 @@
     var vals = [];
     rows.forEach(function (r) { if (r.b1 != null) vals.push(r.b1); if (r.b2 != null) vals.push(r.b2); });
     if (!vals.length) { host.appendChild(el("p", "note", "No trim data in this window.")); return; }
-    var nzHi = Math.max(20, Math.ceil(Math.max.apply(null, vals) / 5) * 5);
-    var nzLo = Math.min(0, Math.floor(Math.min.apply(null, vals) / 5) * 5);
-    var rowH = HAVE.tt2 ? 46 : 36, padL = 108, padR = 58, top = 10;
+    /* axis spans -30 to +30 %, widened in 10 % steps only if a value would fall outside it */
+    var nzHi = Math.max(30, Math.ceil(Math.max.apply(null, vals) / 10) * 10);
+    var nzLo = Math.min(-30, Math.floor(Math.min.apply(null, vals) / 10) * 10);
+    var rowH = HAVE.tt2 ? 48 : 38, padL = 132, padR = 24, top = 24;
     var h = top + rows.length * rowH + 26, iw = w - padL - padR;
     var Xs = function (v) { return padL + (v - nzLo) / (nzHi - nzLo) * iw; };
+    var nzStep = 10;
+    var bottom = top + rows.length * rowH;
     var svg = svgEl("svg", { viewBox: "0 0 " + w + " " + h, height: h, role: "img" });
     svg.setAttribute("aria-label", "Median total fuel correction by operating state, percent");
-    svg.appendChild(svgEl("rect", { x: Xs(0), y: top, width: Math.max(1, Xs(10) - Xs(0)), height: rows.length * rowH, fill: "var(--band)" }));
-    var bl = svgEl("text", { x: Xs(10) + 4, y: top + 10, fill: "var(--ink-muted)", "font-size": 9.5, "font-family": "var(--mono)" });
-    bl.textContent = "10 % limit"; svg.appendChild(bl);
-    for (var g2 = 0; g2 <= 4; g2++) {
-      var gv = nzLo + (nzHi - nzLo) * g2 / 4;
-      svg.appendChild(svgEl("line", { x1: Xs(gv), x2: Xs(gv), y1: top, y2: top + rows.length * rowH, stroke: "var(--grid)", "stroke-width": 1 }));
-      var gt = svgEl("text", { x: Xs(gv), y: h - 8, "text-anchor": g2 === 0 ? "start" : g2 === 4 ? "end" : "middle", fill: "var(--ink-muted)", "font-size": 9.5, "font-family": "var(--mono)" });
-      gt.textContent = (gv > 0 ? "+" : "") + Math.round(gv); svg.appendChild(gt);
+    /* the +/-10 % band, with its two limits labelled in a strip above the rows */
+    svg.appendChild(svgEl("rect", { x: Xs(-10), y: top, width: Math.max(1, Xs(10) - Xs(-10)), height: bottom - top, fill: "var(--band)" }));
+    [[-10, "\u221210 % limit"], [10, "+10 % limit"]].forEach(function (lm) {
+      svg.appendChild(svgEl("line", { x1: Xs(lm[0]), x2: Xs(lm[0]), y1: top - 6, y2: bottom, stroke: "var(--ink-muted)", "stroke-width": 1, "stroke-dasharray": "3 3" }));
+      var lt = svgEl("text", { x: Xs(lm[0]), y: top - 10, "text-anchor": "middle", fill: "var(--ink-muted)", "font-size": 9.5, "font-family": "var(--mono)" });
+      lt.textContent = lm[1]; svg.appendChild(lt);
+    });
+    for (var gv = nzLo; gv <= nzHi; gv += nzStep) {
+      if (gv !== 0 && gv !== -10 && gv !== 10)
+        svg.appendChild(svgEl("line", { x1: Xs(gv), x2: Xs(gv), y1: top, y2: bottom, stroke: "var(--grid)", "stroke-width": 1 }));
+      var gt = svgEl("text", { x: Xs(gv), y: h - 8, "text-anchor": "middle", fill: "var(--ink-muted)", "font-size": 9.5, "font-family": "var(--mono)" });
+      gt.textContent = (gv > 0 ? "+" : gv < 0 ? "\u2212" : "") + Math.abs(gv); svg.appendChild(gt);
     }
-    svg.appendChild(svgEl("line", { x1: Xs(0), x2: Xs(0), y1: top, y2: top + rows.length * rowH, stroke: "var(--axis)", "stroke-width": 1 }));
+    svg.appendChild(svgEl("line", { x1: Xs(0), x2: Xs(0), y1: top, y2: bottom, stroke: "var(--axis)", "stroke-width": 1 }));
     rows.forEach(function (r, ri) {
       var y0 = top + ri * rowH;
+      if (ri > 0) svg.appendChild(svgEl("line", { x1: padL, x2: w - padR, y1: y0, y2: y0, stroke: "var(--grid)", "stroke-width": 1 }));
       var nm = svgEl("text", { x: padL - 12, y: y0 + rowH / 2 - 2, "text-anchor": "end", fill: "var(--ink)", "font-size": 12, "font-weight": 600, "font-family": "var(--sans)" });
       nm.textContent = r.label; svg.appendChild(nm);
       var ct = svgEl("text", { x: padL - 12, y: y0 + rowH / 2 + 12, "text-anchor": "end", fill: "var(--ink-muted)", "font-size": 10, "font-family": "var(--mono)" });
       ct.textContent = r.n + " frames"; svg.appendChild(ct);
+      var nb = HAVE.tt2 ? 2 : 1, bh = 11, gap = 2;
+      var by0 = y0 + (rowH - (nb * bh + (nb - 1) * gap)) / 2;
       [["b1", "var(--s1)"], ["b2", "var(--s2)"]].forEach(function (pr, bi) {
         var v = r[pr[0]]; if (v == null) return;
-        var bh = 11, by = y0 + 8 + bi * (bh + 2);   /* 2px surface gap between adjacent bars */
+        var by = by0 + bi * (bh + gap);
         var x0 = Math.min(Xs(0), Xs(v)), bw2 = Math.max(2, Math.abs(Xs(v) - Xs(0)));
         svg.appendChild(svgEl("rect", { x: x0, y: by, width: bw2, height: bh, rx: 4, fill: pr[1] }));
-        var vl = svgEl("text", { x: x0 + bw2 + 6, y: by + bh - 2, fill: "var(--ink-2)", "font-size": 10.5, "font-family": "var(--mono)", "font-weight": 500 });
-        vl.textContent = (v > 0 ? "+" : "") + v.toFixed(1); svg.appendChild(vl);
+        /* label past the bar's free end: right of positive bars, left of negative ones */
+        var neg = v < 0, inside = neg ? (x0 - 6 - 40 < padL) : (x0 + bw2 + 6 + 40 > w);
+        /* a bar that runs close to the plot edge carries its label inside the bar end */
+        var lx = inside ? (neg ? x0 + 6 : x0 + bw2 - 6) : (neg ? x0 - 6 : x0 + bw2 + 6);
+        var anc = inside ? (neg ? "start" : "end") : (neg ? "end" : "start");
+        var vl = svgEl("text", { x: lx, y: by + bh - 2, "text-anchor": anc, fill: inside ? "var(--surface)" : "var(--ink-2)", stroke: inside ? "none" : "var(--surface)", "stroke-width": 3, "paint-order": "stroke", "font-size": 10.5, "font-family": "var(--mono)", "font-weight": 500 });
+        vl.textContent = (v > 0 ? "+" : v < 0 ? "\u2212" : "") + Math.abs(v).toFixed(1); svg.appendChild(vl);
       });
     });
     host.appendChild(svg);

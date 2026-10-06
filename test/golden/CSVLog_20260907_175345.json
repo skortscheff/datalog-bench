@@ -5,7 +5,6 @@
     "rpm": true,
     "vss": true,
     "load": true,
-    "tps": true,
     "maf": true,
     "spark": true,
     "ect": true,
@@ -16,9 +15,6 @@
     "ltft2": true,
     "lam1": true,
     "lam2": true,
-    "o2b1s2": true,
-    "o2b2s2": true,
-    "fs1": true,
     "tt1": true,
     "tt2": true,
     "lean": true,
@@ -39,22 +35,10 @@
   },
   "findings": [
     {
-      "id": "cat",
-      "sev": "serious",
-      "tag": "Catalyst",
-      "h": "Post-catalyst sensors are swinging"
-    },
-    {
       "id": "trim-level",
       "sev": "warning",
       "tag": "Fuel trim",
       "h": "Engine running lean, ECU adding fuel to compensate"
-    },
-    {
-      "id": "coverage",
-      "sev": "neutral",
-      "tag": "Coverage",
-      "h": "1 diagnostic channel missing from this log"
     },
     {
       "id": "bank-balance",
@@ -94,16 +78,15 @@
       "dt": 3.612,
       "repeatRun": 1
     },
+    "rpmInfo": {
+      "idleMedian": 703,
+      "idleSd": 581.9002913945294,
+      "idleN": 151,
+      "dips": 0,
+      "stalls": 0,
+      "lowest": null
+    },
     "unitsConverted": false,
-    "skippedRules": [
-      {
-        "id": "volt",
-        "missing": "volt"
-      },
-      {
-        "id": "gps-precision",
-        "missing": "lat"
-      }
-    ]
+    "skippedRules": []
   }
 }

@@ -251,3 +251,22 @@ test("an internal failure returns a generic 500 that does not leak the cause", a
     if (existsSync(dbPath)) rmSync(dbPath);
   }
 });
+
+test("PATCH sets, trims, caps and clears a note; list returns it; bad bodies are 400, unknown id 404", async () => {
+  const csv = readFileSync(path.join(ROOT, "fixtures", "CSVLog_20260910_140052.csv"), "utf8");
+  const up = await req("POST", "/logs", { name: "note-me.csv", text: csv });
+  assert.equal(up.status, 201);
+  const id = up.body.id;
+  const row = async () => (await req("GET", "/logs")).body.find((r) => r.id === id);
+  assert.equal((await row()).note, "");
+  const r = await req("PATCH", "/logs/" + id, { note: "  AC on\n used OEM MAF  " });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.note, "AC on  used OEM MAF");
+  assert.equal((await row()).note, "AC on  used OEM MAF");
+  assert.equal((await req("PATCH", "/logs/" + id, { note: "x".repeat(900) })).body.note.length, 500);
+  assert.equal((await req("PATCH", "/logs/" + id, { note: "" })).status, 200);
+  assert.equal((await row()).note, "");
+  assert.equal((await req("PATCH", "/logs/" + id, { note: 5 })).status, 400);
+  assert.equal((await req("PATCH", "/logs/" + id, [1])).status, 400);
+  assert.equal((await req("PATCH", "/logs/999999", { note: "x" })).status, 404);
+});

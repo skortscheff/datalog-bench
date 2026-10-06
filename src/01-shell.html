@@ -68,18 +68,25 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 [hidden] { display: none !important; }
 
 /* ---------- app bar ---------- */
-.appbar { position: sticky; top: 0; z-index: 50; background: var(--plane); border-bottom: 1px solid var(--hair); }
+.appbar { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--surface) 88%, transparent);
+          backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px);
+          border-bottom: 1px solid var(--hair); }
 .appbar-in { max-width: var(--maxw); margin: 0 auto; padding: 11px 20px 12px;
              display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; }
 .brand { display: flex; align-items: baseline; gap: 9px; }
-.brand h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.brand h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.015em; display: flex; align-items: center; gap: 8px; }
+.brand h1::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--s1);
+                    box-shadow: 4px 4px 0 -1px var(--s2); }
 .brand span { font-size: 11.5px; color: var(--ink-muted); }
 .appbar .grow { flex: 1 1 30px; }
 
 .btn { appearance: none; cursor: pointer; font-family: var(--sans); font-size: 12.5px; font-weight: 500;
-       padding: 6px 12px; border-radius: 5px; border: 1px solid var(--hair-strong);
-       background: var(--surface); color: var(--ink); }
-.btn:hover { border-color: var(--ink-muted); }
+       padding: 6px 12px; border-radius: 6px; border: 1px solid var(--hair-strong);
+       background: var(--surface); color: var(--ink); white-space: nowrap;
+       transition: background .12s, border-color .12s, color .12s, box-shadow .12s; }
+.btn:hover { border-color: var(--ink-muted); box-shadow: 0 1px 2px rgba(14,18,22,0.06); }
+.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.btn.danger:hover { color: var(--critical); background: color-mix(in srgb, var(--critical) 9%, transparent); }
 .btn.primary { background: var(--s1); border-color: var(--s1); color: #fff; }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
@@ -118,7 +125,8 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 .supported dd { margin: 2px 0 0; font-size: 11.5px; color: var(--ink-2); }
 
 /* ---------- filter row ---------- */
-.filters { position: sticky; top: 50px; z-index: 40; background: var(--plane);
+.filters { position: sticky; top: 50px; z-index: 40; background: color-mix(in srgb, var(--plane) 92%, transparent);
+           backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
            border-bottom: 1px solid var(--hair); margin-bottom: 24px; }
 .filters-in { max-width: var(--maxw); margin: 0 auto; padding: 12px 20px 14px;
               display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px 28px; align-items: end; }
@@ -128,8 +136,10 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
              display: flex; gap: 10px; align-items: baseline; }
 .fl > .lbl .now { font-family: var(--mono); letter-spacing: 0; text-transform: none;
                   color: var(--ink-2); font-size: 11.5px; }
-.seg { display: flex; gap: 2px; background: var(--surface-sunk); padding: 2px;
+.seg { display: flex; gap: 2px; background: var(--surface-sunk); padding: 2px; max-width: 100%;
+       overflow-x: auto; scrollbar-width: none;
        border-radius: var(--r); border: 1px solid var(--hair); }
+.seg::-webkit-scrollbar { display: none; }
 .seg button { appearance: none; border: 0; background: transparent; cursor: pointer; font-family: var(--sans);
               font-size: 12.5px; font-weight: 500; color: var(--ink-2); padding: 5px 11px;
               border-radius: 4px; white-space: nowrap; }
@@ -150,16 +160,18 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 .brush .reset:hover { color: var(--ink); border-color: var(--hair-strong); }
 
 /* ---------- sections, cards ---------- */
-.sec { margin: 34px 0 12px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.sec h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
-.sec p { margin: 0; font-size: 12.5px; color: var(--ink-muted); max-width: 62ch; }
+.sec { margin: 44px 0 14px; display: flex; flex-direction: column; gap: 3px; }
+.sec h2 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.sec p { margin: 0; font-size: 13px; color: var(--ink-2); max-width: 78ch; text-wrap: pretty; }
 .sec .grow { flex: 1 1 20px; }
 .wrap > .sec:first-child { margin-top: 0; }
 
-.card { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r);
-        padding: 14px 16px 12px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--hair); border-radius: 10px;
+        padding: 16px 18px 14px; min-width: 0; box-shadow: 0 1px 2px rgba(14,18,22,0.04); }
+.card + .card { margin-top: 12px; }
+.grid-2 > .card + .card { margin-top: 0; }
 .card > header { display: flex; align-items: baseline; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 4px; }
-.card > header h3 { margin: 0; font-size: 13px; font-weight: 600; }
+.card > header h3 { margin: 0; font-size: 13.5px; font-weight: 600; }
 .card > header .unit { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); }
 .card > header .grow { flex: 1 1 20px; }
 .card .note { margin: 6px 0 0; font-size: 11.5px; color: var(--ink-muted); max-width: 74ch; }
@@ -185,14 +197,16 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 /* column count is set inline from the tile count, so a log with only three
    supported KPIs fills its row instead of trailing off into dead space */
 .kpis { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 1px; background: var(--hair);
-        border: 1px solid var(--hair); border-radius: var(--r); overflow: hidden; }
-.kpi { background: var(--surface); padding: 13px 14px 14px; display: flex; flex-direction: column; gap: 3px; }
+        border: 1px solid var(--hair); border-radius: 10px; overflow: hidden; box-shadow: 0 1px 2px rgba(14,18,22,0.04); }
+.kpi { background: var(--surface); padding: 15px 16px 16px; display: flex; flex-direction: column; gap: 4px; }
+.kpi .chip { margin-top: 2px; }
 .kpi .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-muted); }
-.kpi .v { font-family: var(--mono); font-size: 25px; font-weight: 500; line-height: 1.1; letter-spacing: -0.02em; }
+.kpi .v { font-family: var(--mono); font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.1; letter-spacing: -0.02em; }
 .kpi .v small { font-size: 13px; font-weight: 400; color: var(--ink-2); margin-left: 1px; }
-.kpi .sub { font-size: 11.5px; color: var(--ink-2); }
+.kpi .sub { font-size: 11.5px; color: var(--ink-muted); }
 
-.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; align-self: flex-start;
+        padding: 1px 8px 1px 6px; border-radius: 999px; background: var(--surface-sunk); }
 .chip .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
 .chip.good { color: var(--good-ink); } .chip.good .dot { background: var(--good); }
 .chip.warning { color: var(--ink); } .chip.warning .dot { background: var(--warning); }
@@ -211,6 +225,8 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 .readout.idle dd { color: var(--ink-muted); }
 
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.grid-2 > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+.grid-2 > [hidden] + :last-child, .grid-2 > :only-child { grid-column: 1 / -1; }
 @media (max-width: 900px) { .grid-2 { grid-template-columns: minmax(0,1fr); } }
 @media (min-width: 1700px) { #panels { grid-template-columns: repeat(3, minmax(0,1fr)); } }
 
@@ -248,12 +264,18 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 .panelbox[open] > summary::before { content: "▾"; }
 .panelbox > summary .grow { flex: 1 1 10px; }
 .panelbox > summary .hint { font-weight: 400; font-size: 11.5px; color: var(--ink-muted); }
+@media (max-width: 620px) { .panelbox > summary .hint { display: none; } }
 .panelbox .body { padding: 4px 16px 16px; border-top: 1px solid var(--hair); }
 
 .maptbl { width: 100%; border-collapse: collapse; font-size: 12px; }
 .maptbl th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
              color: var(--ink-muted); font-weight: 600; padding: 9px 8px 6px; border-bottom: 1px solid var(--hair); }
-.maptbl td { padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+.maptbl td { padding: 8px 8px; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+.maptbl tbody tr:last-child td { border-bottom: 0; }
+.maptbl td.acts { white-space: nowrap; text-align: right; }
+.maptbl td.acts .btn { padding: 4px 9px; font-size: 12px; }
+.maptbl td.when { white-space: nowrap; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.maptbl td.num { font-family: var(--mono); font-size: 11.5px; color: var(--ink-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .maptbl td.ch { font-weight: 500; }
 .maptbl td.u { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); }
 .maptbl select { font-family: var(--mono); font-size: 11.5px; padding: 3px 6px; max-width: 320px; width: 100%;
@@ -262,6 +284,7 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 .maptbl tr.hrow { cursor: pointer; }
 .maptbl tr.hrow:hover td { background: var(--surface-sunk); }
 .maptbl tr.hrow td.nm { font-weight: 500; }
+.maptbl td.note-cell { min-width: 220px; max-width: 360px; color: var(--ink-2); font-size: 12px; line-height: 1.45; }
 .maptbl td.cbx { width: 22px; text-align: center; }
 .maptbl td.cbx input { cursor: pointer; }
 .maptbl tr.grp td { background: var(--surface-sunk); font-size: 10px; text-transform: uppercase;
@@ -291,12 +314,18 @@ table.data tbody td { padding: 5px 10px; text-align: right; border-bottom: 1px s
 table.data tbody td:first-child { text-align: left; color: var(--ink); position: sticky; left: 0;
                                   background: var(--surface); border-right: 1px solid var(--hair); }
 table.data tbody tr:hover td, table.data tbody tr:hover td:first-child { background: var(--surface-sunk); }
+.cmpwrap { max-height: none; margin-top: 10px; }
+.cmptbl th { vertical-align: bottom; text-transform: none; letter-spacing: 0; font-size: 12px; color: var(--ink); padding: 12px 10px 10px; }
+.cmptbl th .u { font-family: var(--mono); font-size: 10.5px; font-weight: 400; color: var(--ink-muted); margin-top: 2px; }
+.cmptbl td { padding: 7px 10px; }
+.cmptbl td.mlab { color: var(--ink-2); font-weight: 500; width: 1%; }
 .tbl-meta { margin: 8px 0 0; font-size: 11.5px; color: var(--ink-muted); }
 
-footer.pg { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--hair);
-            font-size: 11.5px; color: var(--ink-muted); max-width: 82ch; }
+footer.pg { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--hair);
+            font-size: 12px; color: var(--ink-muted); max-width: 82ch; }
+.savebar { display: flex; align-items: center; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--ink-muted); }
 footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2); }
-.banner { display: flex; gap: 10px; align-items: baseline; padding: 10px 14px; border-radius: var(--r);
+.banner { display: flex; gap: 10px; align-items: center; padding: 11px 14px; border-radius: 10px;
           background: var(--surface-sunk); border: 1px solid var(--hair); font-size: 12.5px;
           color: var(--ink-2); margin-bottom: 18px; }
 .banner b { color: var(--ink); }
@@ -327,12 +356,12 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
       <h3>Saved history</h3>
       <span class="unit" id="history-count">&mdash;</span>
       <span class="grow"></span>
-      <button class="btn" type="button" id="btn-compare" disabled>Compare selected (0)</button>
+      <button class="btn primary" type="button" id="btn-compare" disabled>Compare selected (0)</button>
       <button class="btn ghost" type="button" id="history-refresh">Refresh</button>
       <button class="btn ghost" type="button" id="history-close">Close</button>
     </header>
     <table class="maptbl" id="history-tbl">
-      <thead><tr><th></th><th>Name</th><th>Session start</th><th>Rows</th><th>Worst finding</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Log</th><th>Recorded</th><th style="text-align:right">Rows</th><th>Note</th><th>Worst finding</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <p class="note" id="history-note">&mdash;</p>
@@ -346,8 +375,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
       <span class="grow"></span>
       <button class="btn ghost" type="button" id="compare-close">Close</button>
     </header>
-    <p class="note">Idle and driving trim use each log's own warm frames &mdash; the same numbers, side by side.</p>
-    <div class="tablewrap"><table class="maptbl" id="compare-tbl"><thead></thead><tbody></tbody></table></div>
+    <div class="tablewrap cmpwrap"><table class="maptbl cmptbl" id="compare-tbl"><thead></thead><tbody></tbody></table></div>
     <p class="note" id="compare-note">&mdash;</p>
   </div>
 </div>
@@ -365,9 +393,9 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
       <div><dt>Reads</dt><dd>Comma, semicolon or tab delimited, with or without metadata header lines</dd></div>
       <div><dt>Maps</dt><dd>~20 OBD channels by name, with a manual override for anything it misses</dd></div>
       <div><dt>Converts</dt><dd>&deg;F to &deg;C, mph to km/h, AFR to lambda, feet to metres</dd></div>
-      <div><dt>Diagnoses</dt><dd>Fuel trim, bank balance, load dependence, thermals, catalyst, charging, log quality</dd></div>
+      <div><dt>Diagnoses</dt><dd>Fuel trim, bank balance, load dependence, thermals, log quality</dd></div>
     </dl>
-    <p class="fine">Every log you open here is also saved to this server's database for history and duplicate detection &mdash; re-opening the same export is recognised, not re-saved. Satellite map tiles are requested only if a log carries GPS and only when the satellite basemap is on.</p>
+    <p class="fine">Every log you open here is also saved to this server's database for history and duplicate detection &mdash; re-opening the same export is recognised, not re-saved.</p>
   </div>
 </div>
 
@@ -390,7 +418,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
     <div class="banner" id="alert-banner" role="alert" hidden></div>
     <div class="banner" id="sample-banner" hidden>
       <span class="chip neutral"><i class="dot"></i><span>Sample</span></span>
-      <span><b>This is the bundled example log</b> &mdash; a short session whose map route is synthetic. Drop your own file in to replace it.</span>
+      <span><b>This is the bundled example log</b> &mdash; a short demonstration session. Drop your own file in to replace it.</span>
     </div>
 
     <div class="sec">
@@ -467,7 +495,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
       </div>
     </div>
 
-    <div class="sec"><h2>Context</h2><p>Terrain, elevation and how reliably the adapter delivered the log.</p></div>
+    <div class="sec"><h2>Capture quality</h2><p>How reliably the adapter delivered the log.</p></div>
     <div class="grid-2">
       <div class="card" id="card-alt" hidden>
         <header><h3>Altitude</h3><span class="unit">m</span></header>
@@ -497,7 +525,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
     <p class="tbl-meta" id="tbl-meta">&mdash;</p>
 
     <footer class="pg" id="pg-foot"></footer>
-    <p class="tbl-meta"><button class="btn ghost" type="button" id="btn-save-current">Save this log</button> <span id="pg-foot-save"></span></p>
+    <div class="savebar"><button class="btn" type="button" id="btn-save-current">Save this log to history</button> <span id="pg-foot-save"></span></div>
   </div>
 </div>
 

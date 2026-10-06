@@ -5,7 +5,6 @@
     "rpm": true,
     "vss": true,
     "load": true,
-    "tps": true,
     "maf": true,
     "spark": true,
     "ect": true,
@@ -16,9 +15,6 @@
     "ltft2": true,
     "lam1": true,
     "lam2": true,
-    "o2b1s2": true,
-    "o2b2s2": true,
-    "fs1": true,
     "tt1": true,
     "tt2": true,
     "lean": true,
@@ -39,16 +35,10 @@
   },
   "findings": [
     {
-      "id": "cat",
-      "sev": "serious",
-      "tag": "Catalyst",
-      "h": "Post-catalyst sensors are swinging"
-    },
-    {
       "id": "load-dep",
       "sev": "warning",
       "tag": "Load dependence",
-      "h": "Lean gets worse the less air the engine is moving"
+      "h": "Lean gets worse as airflow rises"
     },
     {
       "id": "iat",
@@ -67,12 +57,6 @@
       "sev": "neutral",
       "tag": "Fuel trim",
       "h": "Worst rich excursion: -19.5 %, sustained 12 s"
-    },
-    {
-      "id": "coverage",
-      "sev": "neutral",
-      "tag": "Coverage",
-      "h": "1 diagnostic channel missing from this log"
     },
     {
       "id": "trim-level",
@@ -101,9 +85,9 @@
   ],
   "metrics": {
     "iatSlope": {
-      "slope": 0.3399875526758543,
-      "r": 0.4979396087896893,
-      "n": 672,
+      "slope": 0.5182941395467897,
+      "r": 0.7551602895631778,
+      "n": 223,
       "iatLo": 38,
       "iatHi": 71
     },
@@ -112,16 +96,15 @@
       "dt": 2.0009999999999764,
       "repeatRun": 4
     },
+    "rpmInfo": {
+      "idleMedian": 705,
+      "idleSd": 146.41251114208302,
+      "idleN": 223,
+      "dips": 0,
+      "stalls": 0,
+      "lowest": null
+    },
     "unitsConverted": false,
-    "skippedRules": [
-      {
-        "id": "volt",
-        "missing": "volt"
-      },
-      {
-        "id": "gps-precision",
-        "missing": "lat"
-      }
-    ]
+    "skippedRules": []
   }
 }

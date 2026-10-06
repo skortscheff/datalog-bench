@@ -5,7 +5,6 @@
     "rpm": true,
     "vss": true,
     "load": true,
-    "tps": true,
     "maf": true,
     "spark": true,
     "ect": true,
@@ -16,9 +15,6 @@
     "ltft2": true,
     "lam1": true,
     "lam2": true,
-    "o2b1s2": true,
-    "o2b2s2": true,
-    "fs1": true,
     "tt1": true,
     "tt2": true,
     "lean": true,
@@ -38,12 +34,6 @@
     "warnings": []
   },
   "findings": [
-    {
-      "id": "cat",
-      "sev": "serious",
-      "tag": "Catalyst",
-      "h": "Post-catalyst sensors are swinging"
-    },
     {
       "id": "trim-level",
       "sev": "warning",
@@ -81,12 +71,6 @@
       "h": "21 frames where engine speed outruns road speed"
     },
     {
-      "id": "coverage",
-      "sev": "neutral",
-      "tag": "Coverage",
-      "h": "1 diagnostic channel missing from this log"
-    },
-    {
       "id": "bank-balance",
       "sev": "good",
       "tag": "Bank balance",
@@ -101,9 +85,9 @@
   ],
   "metrics": {
     "iatSlope": {
-      "slope": 0.054248280895921326,
-      "r": 0.058024047825643646,
-      "n": 347,
+      "slope": -0.060393055526633606,
+      "r": -0.11121429736904606,
+      "n": 77,
       "iatLo": 39,
       "iatHi": 71
     },
@@ -112,16 +96,15 @@
       "dt": 4.0014999999999645,
       "repeatRun": 1
     },
+    "rpmInfo": {
+      "idleMedian": 703,
+      "idleSd": 264.58425590014053,
+      "idleN": 77,
+      "dips": 0,
+      "stalls": 0,
+      "lowest": null
+    },
     "unitsConverted": false,
-    "skippedRules": [
-      {
-        "id": "volt",
-        "missing": "volt"
-      },
-      {
-        "id": "gps-precision",
-        "missing": "lat"
-      }
-    ]
+    "skippedRules": []
   }
 }

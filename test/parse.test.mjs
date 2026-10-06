@@ -28,9 +28,9 @@ test("a thousands separator in a comma file is stripped, not read as a decimal",
   assert.deepEqual(L.cols.rpm, [1200, 1250, 1300]);
 });
 
-test("a missing throttle value is never classed as idle", () => {
-  const head = "Time (sec),Engine RPM (RPM),Absolute throttle position (%),Engine coolant temperature (°C)\n";
-  const body = rows(6, (i) => [i, 800, i % 2 ? "" : 5, 90]);
+test("a missing road-speed value is never classed as idle", () => {
+  const head = "Time (sec),Engine RPM (RPM),Vehicle speed (km/h),Engine coolant temperature (°C)\n";
+  const body = rows(6, (i) => [i, 800, i % 2 ? "" : 0, 90]);
   const L = parse(head + body);
   assert.equal(L.error, undefined);
   L.state.forEach((st, i) => { if (i % 2) assert.notEqual(st, "idle", "frame " + i); });
@@ -38,8 +38,8 @@ test("a missing throttle value is never classed as idle", () => {
 });
 
 test("a missing coolant value is classed as other, not warm-up", () => {
-  const head = "Time (sec),Engine RPM (RPM),Absolute throttle position (%),Engine coolant temperature (°C)\n";
-  const body = rows(6, (i) => [i, 800, 5, i === 3 ? "" : 90]);
+  const head = "Time (sec),Engine RPM (RPM),Vehicle speed (km/h),Engine coolant temperature (°C)\n";
+  const body = rows(6, (i) => [i, 800, 0, i === 3 ? "" : 90]);
   const L = parse(head + body);
   assert.equal(L.state[3], "other");
   assert.equal(L.state[2], "idle");
@@ -58,4 +58,20 @@ test("header-only, single-row and empty input do not throw", () => {
   const one = parse("Time (sec),Engine RPM (RPM),Vehicle speed (km/h)\n0,800,0\n");
   assert.equal(one.error, undefined);
   assert.equal(one.n, 1);
+});
+
+test("rpm stability: the 2026-10-06 VEMO log shows two stalls; cranking and key-off are not counted", async () => {
+  const { loadEngine } = await import("./harness.mjs");
+  const { parseLog, analyze } = loadEngine();
+  const { readFileSync } = await import("node:fs");
+  const text = readFileSync(new URL("../fixtures/CSVLog_20261006_084750.csv", import.meta.url), "utf8");
+  const L = parseLog(text, "x.csv", false);
+  analyze(L);
+  const r = JSON.parse(JSON.stringify(L.metrics.rpmInfo));
+  assert.equal(r.stalls, 2);
+  assert.ok(r.dips >= r.stalls);
+  assert.equal(r.lowest, 0);
+  const ok = parseLog(readFileSync(new URL("../fixtures/CSVLog_20260930_131813.csv", import.meta.url), "utf8"), "y.csv", false);
+  analyze(ok);
+  assert.equal(ok.metrics.rpmInfo.stalls, 0);
 });

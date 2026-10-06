@@ -24,12 +24,8 @@
       pats: [/calculated (engine )?load/, /engine load/, /^load$/] },
     { k: "aload",  nm: "Absolute load",       unit: "%",    grp: "core",
       pats: [/absolute load/] },
-    { k: "tps",    nm: "Throttle position",   unit: "%",    grp: "core",
-      pats: [/absolute throttle/, /throttle position(?!.*relative)/, /^tps$/, /throttle$/] },
     { k: "maf",    nm: "Air mass flow",       unit: "g/s",  grp: "core",
       pats: [/mass ?air ?flow/, /^maf$/, /air flow rate/] },
-    { k: "map",    nm: "Manifold pressure",   unit: "kPa",  grp: "core",
-      pats: [/(intake )?manifold (absolute )?pressure/, /^map$/, /boost/] },
     { k: "spark",  nm: "Ignition advance",    unit: "deg",  grp: "core",
       pats: [/ignition timing/, /timing advance/, /spark advance/] },
 
@@ -37,10 +33,6 @@
       pats: [/engine coolant/, /coolant temp/, /^ect$/, /water temp/] },
     { k: "iat",    nm: "Intake air temp",     unit: "°C", grp: "therm",
       pats: [/intake air temp/, /^iat$/, /air intake temp/, /charge air temp/] },
-    { k: "aat",    nm: "Ambient air temp",    unit: "°C", grp: "therm",
-      pats: [/ambient air temp/, /outside air temp/, /^aat$/] },
-    { k: "oil",    nm: "Oil temperature",     unit: "°C", grp: "therm",
-      pats: [/oil temp/] },
 
     { k: "stft1",  nm: "STFT bank 1",         unit: "%",    grp: "trim",
       pats: [/short.*term.*trim.*bank ?1/, /bank ?1.*short.*term/, /^stft ?1/, /short.*term.*trim(?!.*bank ?2)/] },
@@ -54,23 +46,7 @@
     { k: "lam1",   nm: "Lambda bank 1",       unit: "λ", grp: "mix",
       pats: [/lambda.*bank ?1/, /wide ?range.*bank ?1/, /equivalence ratio/, /^lambda$/, /^lam1/] },
     { k: "lam2",   nm: "Lambda bank 2",       unit: "λ", grp: "mix",
-      pats: [/lambda.*bank ?2/, /wide ?range.*bank ?2/, /^lam2/] },
-    { k: "o2b1s2", nm: "Post-cat O2 bank 1",  unit: "V",    grp: "mix",
-      pats: [/o2.*bank ?1.*sensor ?2/, /bank ?1.*sensor ?2.*volt/, /^o2b1s2/, /downstream.*bank ?1/] },
-    { k: "o2b2s2", nm: "Post-cat O2 bank 2",  unit: "V",    grp: "mix",
-      pats: [/o2.*bank ?2.*sensor ?2/, /bank ?2.*sensor ?2.*volt/, /^o2b2s2/, /downstream.*bank ?2/] },
-    { k: "fs1",    nm: "Fuel system status",  unit: "",     grp: "mix",
-      pats: [/fuel system ?1? status/, /fuel system status/, /^fuel status/] },
-
-    { k: "volt",   nm: "Module voltage",      unit: "V",    grp: "elec",
-      pats: [/control module voltage/, /module volt/, /battery volt/, /^volt(age)?$/] },
-
-    { k: "lat",    nm: "Latitude",            unit: "°", grp: "gps",
-      pats: [/latitude/, /^lat$/] },
-    { k: "lon",    nm: "Longitude",           unit: "°", grp: "gps",
-      pats: [/longitude/, /^lon$/, /^lng$/] },
-    { k: "alt",    nm: "Altitude",            unit: "m",    grp: "gps",
-      pats: [/altitude/, /^alt$/, /elevation/] }
+      pats: [/lambda.*bank ?2/, /wide ?range.*bank ?2/, /^lam2/] }
   ];
 
   /* Derived rather than hand-listed, so it can never drift from CHAN. */
@@ -80,12 +56,11 @@
   var AFR_PATS = [/air ?[\/ ]?fuel ratio/, /^afr/];
   var STOICH = 14.7;
 
-  /* Channels where a constant-zero column means the PID is unsupported rather
-     than measured. Deliberately excludes vss, tps, load, trims, spark, purge
-     and O2 voltage, where a steady zero can be a real reading. */
+  /* Channels where a constant-zero column means the PID is unsupported (or the
+     sensor is unplugged) rather than measured. Deliberately excludes vss, load,
+     trims and spark, where a steady zero can be a real reading. */
   var ZERO_MEANS_ABSENT = {
-    volt: 1, ect: 1, iat: 1, aat: 1, oil: 1, maf: 1,
-    lam1: 1, lam2: 1, baro: 1, alt: 1, map: 1, rpm: 1
+    ect: 1, iat: 1, maf: 1, lam1: 1, lam2: 1, rpm: 1
   };
 
   /* A parenthesised group is dropped only when it looks like a bare unit
@@ -308,17 +283,13 @@
       var ci = m[ch.k];
       if (ci == null || ch.text) return;
       var u = unitOf(L.head[ci]), conv = null;
-      if ((ch.k === "ect" || ch.k === "iat" || ch.k === "aat" || ch.k === "oil") && u.fahrenheit) {
+      if ((ch.k === "ect" || ch.k === "iat") && u.fahrenheit) {
         conv = function (v) { return (v - 32) * 5 / 9; };
         warn.push(ch.nm + " was in °F and has been converted to °C.");
       }
       if (ch.k === "vss" && u.mph) {
         conv = function (v) { return v * 1.609344; };
         warn.push("Vehicle speed was in mph and has been converted to km/h.");
-      }
-      if (ch.k === "alt" && u.feet) {
-        conv = function (v) { return v * 0.3048; };
-        warn.push("Altitude was in feet and has been converted to metres.");
       }
       if (ch.k === "maf" && u.lbmin) {
         conv = function (v) { return v * 7.5598; };
@@ -343,7 +314,7 @@
           if (arr[zi] !== 0) { nz++; break; }
         }
         if (seen > 4 && nz === 0) {
-          warn.push("“" + L.head[ci] + "” answered a constant zero for the whole log — the ECU does not support that PID, so the channel was dropped rather than analysed.");
+          warn.push("“" + L.head[ci] + "” read zero for the whole log — the ECU does not support that PID, or the sensor is unplugged — so the channel was dropped rather than analysed.");
           delete m[ch.k];
           return;
         }
@@ -420,23 +391,18 @@
     C.dt = dt;
 
     /* ---- operating state, using whatever channels exist ----
-     * "idle" means closed throttle, at any road speed (coasting counts) — not
-     * just stopped. The 2026-09-09 heat-soak/low-airflow trim pattern shows up
-     * identically while coasting at speed as it does standing still, so a
-     * stopped-only definition mis-buckets those frames into "driving" and
-     * dilutes the idle-vs-driving comparison. Fall back to the old vss/rpm
-     * based split only when there's no throttle channel to key off of. */
+     * There is no throttle channel. "idle" is road speed 0 when the log has road
+     * speed, otherwise a running engine under 1200 rpm; "driving" is road speed
+     * over 5 km/h, otherwise over 1600 rpm. Frames between are "other". */
     var st = new Array(n);
-    var hasEct = !!C.ect, hasVss = !!C.vss, hasRpm = !!C.rpm, hasTps = !!C.tps;
+    var hasEct = !!C.ect, hasVss = !!C.vss, hasRpm = !!C.rpm;
     for (var g = 0; g < n; g++) {
       /* a missing value is unknown, never "closed" or "cold": null compares as 0 */
       if (hasEct && C.ect[g] == null) { st[g] = "other"; continue; }
       var warmv = hasEct ? (C.ect[g] > 70) : true;
       var running = hasRpm ? C.rpm[g] > 300 : true;
-      var closedThrottle = hasTps ? (C.tps[g] != null && C.tps[g] < 15) :
-        (hasVss ? C.vss[g] === 0 : (hasRpm ? C.rpm[g] > 0 && C.rpm[g] < 1200 : false));
-      var openThrottle = hasTps ? (C.tps[g] != null && C.tps[g] >= 15) :
-        (hasVss ? C.vss[g] > 5 : (hasRpm ? C.rpm[g] > 1600 : false));
+      var closedThrottle = hasVss ? C.vss[g] === 0 : (hasRpm ? C.rpm[g] > 0 && C.rpm[g] < 1200 : false);
+      var openThrottle = hasVss ? C.vss[g] > 5 : (hasRpm ? C.rpm[g] > 1600 : false);
       if (hasEct && !warmv && running) st[g] = "warmup";
       else if (warmv && running && closedThrottle) st[g] = "idle";
       else if (warmv && running && openThrottle) st[g] = "driving";
@@ -449,13 +415,5 @@
     CHAN.forEach(function (ch) { if (C[ch.k]) L.have[ch.k] = true; });
     ["tt1", "tt2", "lean", "dt"].forEach(function (k3) { if (C[k3]) L.have[k3] = true; });
     L.unitWarnings = warn;
-
-    /* closed-loop frame set, if the log says anything about it */
-    L.closedLoop = null;
-    if (C.fs1) {
-      L.closedLoop = [];
-      for (var h = 0; h < n; h++) if (C.fs1[h] === 2 || C.fs1[h] === 16) L.closedLoop.push(h);
-      if (!L.closedLoop.length) L.closedLoop = null;
-    }
     return L;
   }

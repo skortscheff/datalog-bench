@@ -11,13 +11,31 @@ It reads standard OBD-II / EOBD data only.
 
 - **Log intake.** Drag and drop or choose one or more CSV files. The parser
   detects the delimiter and decimal separator, matches column headers to known
-  channels, and converts imperial units (°F, mph, lb/min, feet) to metric. A
+  channels, and converts imperial units (°F, mph, lb/min) to metric. A
   built-in sample log is included.
+- **Channels read.** Engine speed, road speed, calculated and absolute load, MAF,
+  ignition advance, coolant and intake air temperature, short- and long-term
+  trim per bank, wideband lambda per bank, and elapsed time (a timestamp column
+  is used only when there is no elapsed-time column). Throttle, fuel system
+  status, post-cat O2, GPS, manifold pressure, ambient and oil temperature and
+  module voltage are deliberately not mapped. Without throttle, "idle" is road
+  speed 0, or under 1200 rpm when the log has no road speed.
+- **Constant-zero channels.** A coolant, intake air, MAF, lambda or rpm column
+  that reads 0 for the whole log is dropped with a warning: the PID is
+  unsupported or the sensor is unplugged.
 - **Channel mapping.** If a column is not recognised, map it to a channel by
   hand. The parse report lists skipped lines, ragged rows and unit conversions.
 - **Summary tiles.** Median fuel trim per bank, peak coolant and intake air
-  temperature, peak engine and road speed, closed-loop share, module voltage,
-  logging gaps and frame count, limited to the channels the log has.
+  temperature, peak engine and road speed, idle speed and stalls, logging gaps and
+  frame count, limited to the channels the log has. A short last row stretches
+  to the full width.
+- **Idle speed and stalls.** Idle speed is the median rpm over warm idle frames;
+  it is flagged "hunting" when the spread (standard deviation) exceeds 250 rpm
+  (`IDLE_HUNT_SD` in `src/06-shell.js`). Without road speed, idle includes
+  coasting, so a healthy idle measures about 140-180 rpm. A dip is a stretch
+  under 450 rpm after the engine first ran above 600 rpm; a stall is a dip
+  that reaches 0. Cranking and the key-off tail are not counted, and slow
+  channel refresh can hide short dips, so the counts are minimums.
 - **Fuel correction charts.** Total fuel correction (STFT + LTFT) with a ±10 %
   band, then separate long-term and short-term trim charts, each with both
   banks.
@@ -26,19 +44,22 @@ It reads standard OBD-II / EOBD data only.
   shows the full frame at the cursor.
 - **Window and state filters.** Drag on the timeline to select a window. Filter
   frames by operating state: all frames, warm-up, idle or driving.
-- **Map and terrain.** For logs with GPS, the route is drawn with event markers,
-  plus an altitude profile. Satellite imagery is optional (see Privacy).
+- **Map and terrain.** The parser no longer maps GPS columns, so this section
+  stays hidden. The drawing code and the `tiles` service are kept for now.
 - **Trim by operating state.** Median total correction split by warm-up, idle
-  and driving.
+  and driving, on a fixed −30 to +30 % axis with the ±10 % band marked.
 - **Sample interval chart.** Shows logging gaps so you can tell which readings
   may be artefacts of a dropped capture.
 - **Table view.** Every source column for every frame in the current window.
 - **History.** Optional and off by default. Turn on "Save opened logs" (or press
   "Save this log") to keep sessions on the server, with duplicate detection by
-  content hash. Reopen or delete any saved session from the History panel.
+  content hash. Reopen or delete any saved session from the History panel, and
+  add a free-text note to each (for example "AC on", "used OEM MAF fitted").
+  The stored headline is computed at upload and is not recomputed when the
+  rules change.
 - **Compare.** Select two to four saved sessions for a side-by-side table:
-  idle and driving trim per bank, closed-loop share, peak temperatures, module
-  voltage, trim-versus-intake-air slope at warm idle, logging cadence, units,
+  session notes, idle and driving trim per bank, idle speed and stalls, peak
+  temperatures, trim-versus-intake-air slope at warm idle, logging cadence, units,
   and which checks each log was too sparse to run.
 
 ## Running it
@@ -72,6 +93,20 @@ browser:
 
 Without the `db` service there is no history or Compare, and without `tiles`
 the map has no satellite imagery. Analysis of the open log still works.
+
+## History API
+
+`web` serves the `db` service under `/api/`:
+
+| Method | Path | Does |
+|---|---|---|
+| `GET` | `/api/logs` | List saved logs, newest session first, with `note` |
+| `POST` | `/api/logs` | Save `{name, text}`; a duplicate by content hash returns the existing id |
+| `GET` | `/api/logs/:id/raw` | The stored CSV, byte for byte |
+| `PATCH` | `/api/logs/:id` | Set `{note}` (control characters stripped, 500 characters max; empty clears) |
+| `DELETE` | `/api/logs/:id` | Remove a log |
+
+The `note` column is added to an existing database on start-up.
 
 ## Privacy
 
