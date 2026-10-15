@@ -273,6 +273,19 @@
       note: L && L.afrCols && L.afrCols.lam1 ? "Converted from the log's air/fuel ratio column, assuming gasoline at 14.7:1." : null });
 
     one("spark", "Ignition advance", "deg", 1, { zero: 0 });
+    one("tps", "Throttle position", "%", 1);
+    one("map", "Manifold pressure (MAP)", "kPa", 0);
+    function o2panel(id, title, k1, k2, note) {
+      var se = [];
+      if (HAVE[k1]) se.push({ k: k1, label: "Bank 1", color: "s1" });
+      if (HAVE[k2]) se.push({ k: k2, label: "Bank 2", color: "s2" });
+      if (se.length) d.push({ id: id, title: title, unit: "V", dp: 2, series: se, ref: [{ v: 0.45, label: "0.45 V" }], note: note });
+    }
+    o2panel("o2f", "Front O2 voltage (pre-catalyst)", "o2b1s1", "o2b2s1",
+      "A healthy narrow-band sensor swings between about 0.1 V and 0.9 V around the 0.45 V line.");
+    o2panel("o2r", "Rear O2 voltage (post-catalyst)", "o2b1s2", "o2b2s2",
+      "A working catalyst holds the rear sensor steadier than the front one, usually near 0.6-0.8 V.");
+    one("knock", "Knock retard", "deg", 1, { zero: 0 });
     PANELS = d;
   }
 
@@ -317,6 +330,11 @@
     if (HAVE.tt2) r.push(["Trim B2", function (i) { return sgn(C.tt2[i], 1) + " %"; }]);
     if (HAVE.lam1) r.push(["λ", function (i) { return fmt(C.lam1[i], 3); }]);
     add("spark", "Advance", "°", 1);
+    add("tps", "Throttle", "%", 1);
+    add("map", "MAP", "kPa", 0);
+    add("o2b1s1", "O2 B1", "V", 2);
+    add("o2b2s1", "O2 B2", "V", 2);
+    add("knock", "Knock", "°", 1);
     r.push(["State", function (i) { return ST[i] === "other" ? "transition" : ST[i]; }]);
     READ = r;
     var host = document.getElementById("readout");

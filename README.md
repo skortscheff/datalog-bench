@@ -1,7 +1,7 @@
 # Datalog Bench
 
-A browser-based analyser for OBD-II datalogs from the BMW M54, recorded with
-OBD Fusion over an ELM327 adapter. Drop in one or more CSV logs to see fuel
+A browser-based analyser for OBD-II datalogs from the BMW M54 and the Chevrolet
+L59 (5.3 L V8), recorded with OBD Fusion over an ELM327 adapter. Drop in one or more CSV logs to see fuel
 trims, engine channels and route data on a shared time axis, and keep a history
 of past sessions to compare side by side.
 
@@ -16,10 +16,32 @@ It reads standard OBD-II / EOBD data only.
 - **Channels read.** Engine speed, road speed, calculated and absolute load, MAF,
   ignition advance, coolant and intake air temperature, short- and long-term
   trim per bank, wideband lambda per bank, and elapsed time (a timestamp column
-  is used only when there is no elapsed-time column). Throttle, fuel system
-  status, post-cat O2, GPS, manifold pressure, ambient and oil temperature and
-  module voltage are deliberately not mapped. Without throttle, "idle" is road
-  speed 0, or under 1200 rpm when the log has no road speed.
+  is used only when there is no elapsed-time column). Also read, for the L59
+  checks: throttle position, manifold pressure (psi and inHg are converted to
+  kPa), fuel system status, O2 voltage per bank for the front (sensor 1) and
+  rear (sensor 2) sensors, and knock retard. GPS, ambient and oil temperature
+  and module voltage are deliberately not mapped. "Idle" is road speed 0, or
+  under 1200 rpm when the log has no road speed; when there is no road speed
+  but there is a throttle channel, idle is taken from the log's own
+  closed-throttle level, since absolute throttle position does not read 0 % at
+  idle.
+- **Engine profiles.** Every engine-dependent limit (idle and stall rpm, idle
+  hunting spread, coolant, intake air and trim limits) lives in a profile, `m54`
+  or `l59` (`PROFILES` in `src/02-parse.js`). The profile is chosen
+  automatically: manifold pressure, narrow-band O2 voltage on sensor 1, knock
+  retard or an L59-style file name point to the L59, and wideband lambda points to
+  the M54. To see or change it, open the "Parse and channels" card and use the
+  **Engine profile** dropdown; the line next to it says what the choice was based
+  on. An override is not saved with a log in History, so a reloaded log is
+  detected again. The M54 profile holds the limits the app shipped with. The L59
+  values are starting estimates and need tuning against real logs.
+- **L59 checks.** With the L59 profile, these run when their channels exist:
+  throttle plausibility, idle manifold vacuum, airflow against manifold
+  pressure times rpm, front O2 sensor switching (stuck or lazy sensors, bank
+  gap), closed-loop time while warm, and knock retard. Knock retard is not a
+  standard OBD-II PID and only appears if you add a GM enhanced PID in OBD Fusion;
+  without it a sudden-timing-drop check runs and is labelled "inferred". These
+  rules do not run on the M54 profile.
 - **Constant-zero channels.** A coolant, intake air, MAF, lambda or rpm column
   that reads 0 for the whole log is dropped with a warning: the PID is
   unsupported or the sensor is unplugged.
@@ -124,16 +146,18 @@ The `note` column is added to an existing database on start-up.
 
     src/                 six numbered parts, concatenated in filename order
       01-shell.html      styles, page skeleton, empty state, history panel
-      02-parse.js        channel spec, parser, unit normalisation
+      02-parse.js        channel spec, engine profiles, parser, unit normalisation
       03-analyze.js      analysis rules and per-session metrics
       04-render.js       chart engine, panels, crosshair, readout
       05-map.js          map projection, tile layer, event markers
       06-shell.js        summary tiles, mapping UI, file intake, history, compare
     db/                  history API (node:http + node:sqlite)
     docker/              nginx configs and the tiles proxy image
-    test/                parser/analysis golden tests, parser edge cases, db tests
+    test/                golden tests, parser edge cases, profile tests, db tests
     .github/workflows/   CI: tests, build gate, Docker image build
-    fixtures/            sample inputs for the tests (GPS columns removed)
+    fixtures/            sample inputs for the tests (GPS columns removed);
+                         L59_*.csv are synthetic, see fixtures/README.md
+    make-l59-fixtures.py generates the synthetic L59 fixtures (seeded)
     build.py             assembler and structural checks
 
 The parts share one scope, so keep the filename order and keep everything
@@ -145,7 +169,8 @@ Build and test:
     python build.py            # assemble dist/Datalog-Bench.html and run the checks
     python build.py --check    # validate only
     npm test                   # golden tests over fixtures, plus parser edge cases
-    npm test -- --update       # rewrite golden files after an intentional change
+    node test/run.mjs --update # rewrite golden files after an intentional change
+                               # (review the git diff of test/golden/ before committing)
     npm run test:db            # history service tests
 
 Requirements: Node 22.5 or later (the history service uses `node:sqlite`),

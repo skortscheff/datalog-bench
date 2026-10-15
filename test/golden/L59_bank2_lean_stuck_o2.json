@@ -1,0 +1,150 @@
+{
+  "error": null,
+  "have": {
+    "t": true,
+    "rpm": true,
+    "vss": true,
+    "load": true,
+    "maf": true,
+    "spark": true,
+    "ect": true,
+    "iat": true,
+    "stft1": true,
+    "ltft1": true,
+    "stft2": true,
+    "ltft2": true,
+    "tps": true,
+    "map": true,
+    "fuelsys": true,
+    "o2b1s1": true,
+    "o2b2s1": true,
+    "o2b1s2": true,
+    "o2b2s2": true,
+    "tt1": true,
+    "tt2": true,
+    "lean": true,
+    "dt": true
+  },
+  "report": {
+    "delim": ",",
+    "headerLine": 2,
+    "columns": 19,
+    "rows": 330,
+    "skipped": 0,
+    "ragged": 0,
+    "decComma": false,
+    "preamble": [
+      "# StartTime = synthetic L59 fixture (seed 59002)"
+    ],
+    "warnings": []
+  },
+  "findings": [
+    {
+      "id": "trim-level",
+      "sev": "critical",
+      "tag": "Fuel trim",
+      "h": "Engine running lean, ECU adding fuel to compensate"
+    },
+    {
+      "id": "bank-balance",
+      "sev": "serious",
+      "tag": "Bank balance",
+      "h": "Bank 2 is corrected 21.9 % harder than bank 1"
+    },
+    {
+      "id": "o2-switching",
+      "sev": "warning",
+      "tag": "Oxygen sensors",
+      "h": "Front oxygen sensor not switching: B2 stuck low (lean)"
+    },
+    {
+      "id": "load-dep",
+      "sev": "neutral",
+      "tag": "Load dependence",
+      "h": "Correction is flat across load"
+    },
+    {
+      "id": "ratio",
+      "sev": "neutral",
+      "tag": "Driveline",
+      "h": "2 frames where engine speed outruns road speed"
+    },
+    {
+      "id": "iat",
+      "sev": "good",
+      "tag": "Intake air",
+      "h": "Intake air stays cool"
+    },
+    {
+      "id": "ect",
+      "sev": "good",
+      "tag": "Cooling",
+      "h": "Coolant temperature stayed normal"
+    },
+    {
+      "id": "gaps",
+      "sev": "good",
+      "tag": "Log quality",
+      "h": "Clean capture at 1.00 s per frame"
+    },
+    {
+      "id": "rich-excursion",
+      "sev": "good",
+      "tag": "Fuel trim",
+      "h": "No rich excursion of note"
+    },
+    {
+      "id": "throttle",
+      "sev": "good",
+      "tag": "Throttle",
+      "h": "Throttle position moves with the driver"
+    },
+    {
+      "id": "map-idle",
+      "sev": "good",
+      "tag": "Manifold pressure",
+      "h": "Idle manifold vacuum looks healthy"
+    },
+    {
+      "id": "map-airflow",
+      "sev": "good",
+      "tag": "Airflow",
+      "h": "Airflow and manifold pressure agree"
+    },
+    {
+      "id": "closed-loop",
+      "sev": "good",
+      "tag": "Closed loop",
+      "h": "ECU runs closed loop when warm"
+    },
+    {
+      "id": "knock-inferred",
+      "sev": "good",
+      "tag": "Knock (inferred)",
+      "h": "No sudden timing pulls at steady speed and load"
+    }
+  ],
+  "metrics": {
+    "iatSlope": null,
+    "iatSlopeReason": "intake air varied under 8 °C at idle",
+    "cadence": {
+      "dt": 1,
+      "repeatRun": 1
+    },
+    "rpmInfo": {
+      "idleMedian": 649,
+      "idleSd": 7.860507343170767,
+      "idleN": 136,
+      "dips": 0,
+      "stalls": 0,
+      "lowest": null
+    },
+    "unitsConverted": false,
+    "skippedRules": [
+      {
+        "id": "knock",
+        "missing": "knock"
+      }
+    ]
+  }
+}

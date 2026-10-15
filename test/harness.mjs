@@ -15,7 +15,7 @@ export function loadEngine(srcDir = SRC_DIR) {
   const src = ["02-parse.js", "03-analyze.js"]
     .map((f) => readFileSync(path.join(srcDir, f), "utf8"))
     .join("\n");
-  const wrapped = `(function () {\n${src}\nreturn { parseLog, analyze };\n})()`;
+  const wrapped = `(function () {\n${src}\nreturn { parseLog, analyze, applyProfile, PROFILES, CHAN };\n})()`;
   const ctx = vm.createContext({ console });
   return vm.runInContext(wrapped, ctx, { filename: "engine.js" });
 }

@@ -1,6 +1,6 @@
   /* Bump by hand when CHAN or RULES changes shape in a way that would
      invalidate old golden files or historical results. */
-  var PARSER_VERSION = "1.0.0";
+  var PARSER_VERSION = "1.1.0";
 
   /* ==========================================================
      CHANNEL SPEC
@@ -34,19 +34,43 @@
     { k: "iat",    nm: "Intake air temp",     unit: "°C", grp: "therm",
       pats: [/intake air temp/, /^iat$/, /air intake temp/, /charge air temp/] },
 
+    /* the trailing "ft" patterns catch GM-style names such as "Long Term FT B1" */
     { k: "stft1",  nm: "STFT bank 1",         unit: "%",    grp: "trim",
-      pats: [/short.*term.*trim.*bank ?1/, /bank ?1.*short.*term/, /^stft ?1/, /short.*term.*trim(?!.*bank ?2)/] },
+      pats: [/short.*term.*trim.*bank ?1/, /bank ?1.*short.*term/, /^stft ?1/, /short.*term.*trim(?!.*bank ?2)/,
+             /short.*term.*ft.*b(ank)? ?1\b/, /short.*term.*ft(?!.*b(ank)? ?2)/] },
     { k: "ltft1",  nm: "LTFT bank 1",         unit: "%",    grp: "trim",
-      pats: [/long.*term.*trim.*bank ?1/, /bank ?1.*long.*term/, /^ltft ?1/, /long.*term.*trim(?!.*bank ?2)/] },
+      pats: [/long.*term.*trim.*bank ?1/, /bank ?1.*long.*term/, /^ltft ?1/, /long.*term.*trim(?!.*bank ?2)/,
+             /long.*term.*ft.*b(ank)? ?1\b/, /long.*term.*ft(?!.*b(ank)? ?2)/] },
     { k: "stft2",  nm: "STFT bank 2",         unit: "%",    grp: "trim",
-      pats: [/short.*term.*trim.*bank ?2/, /bank ?2.*short.*term/, /^stft ?2/] },
+      pats: [/short.*term.*trim.*bank ?2/, /bank ?2.*short.*term/, /^stft ?2/, /short.*term.*ft.*b(ank)? ?2\b/] },
     { k: "ltft2",  nm: "LTFT bank 2",         unit: "%",    grp: "trim",
-      pats: [/long.*term.*trim.*bank ?2/, /bank ?2.*long.*term/, /^ltft ?2/] },
+      pats: [/long.*term.*trim.*bank ?2/, /bank ?2.*long.*term/, /^ltft ?2/, /long.*term.*ft.*b(ank)? ?2\b/] },
 
     { k: "lam1",   nm: "Lambda bank 1",       unit: "λ", grp: "mix",
       pats: [/lambda.*bank ?1/, /wide ?range.*bank ?1/, /equivalence ratio/, /^lambda$/, /^lam1/] },
     { k: "lam2",   nm: "Lambda bank 2",       unit: "λ", grp: "mix",
-      pats: [/lambda.*bank ?2/, /wide ?range.*bank ?2/, /^lam2/] }
+      pats: [/lambda.*bank ?2/, /wide ?range.*bank ?2/, /^lam2/] },
+
+    /* Channels below were added for the Chevrolet L59 profile. They sit last so
+       they can never claim a column an earlier channel would have taken. Header
+       texts are the OBD Fusion / ELM327 PID names; "knock" is not a standard
+       OBD-II PID, so it appears only when the user has added a GM enhanced PID. */
+    { k: "tps",    nm: "Throttle position",   unit: "%",    grp: "core",
+      pats: [/^absolute throttle position/, /^throttle position/, /throttle (position|pos)/, /^tps$/, /^throttle$/] },
+    { k: "map",    nm: "Manifold pressure",   unit: "kPa",  grp: "core",
+      pats: [/intake manifold/, /manifold (absolute )?pressure/, /^map$/] },
+    { k: "fuelsys", nm: "Fuel system status", unit: "",     grp: "mix",
+      pats: [/^fuel system 1 status/, /^fuel system status/, /^fuel system 1$/] },
+    { k: "o2b1s1", nm: "O2 voltage B1 S1",    unit: "V",    grp: "mix",
+      pats: [/volt.*bank ?1.*sensor ?1\b/, /bank ?1.*sensor ?1.*volt/, /^o2 ?b1 ?s1\b/] },
+    { k: "o2b2s1", nm: "O2 voltage B2 S1",    unit: "V",    grp: "mix",
+      pats: [/volt.*bank ?2.*sensor ?1\b/, /bank ?2.*sensor ?1.*volt/, /^o2 ?b2 ?s1\b/] },
+    { k: "o2b1s2", nm: "O2 voltage B1 S2 (post-cat)", unit: "V", grp: "mix",
+      pats: [/volt.*bank ?1.*sensor ?2\b/, /bank ?1.*sensor ?2.*volt/, /^o2 ?b1 ?s2\b/] },
+    { k: "o2b2s2", nm: "O2 voltage B2 S2 (post-cat)", unit: "V", grp: "mix",
+      pats: [/volt.*bank ?2.*sensor ?2\b/, /bank ?2.*sensor ?2.*volt/, /^o2 ?b2 ?s2\b/] },
+    { k: "knock",  nm: "Knock retard",        unit: "deg",  grp: "core",
+      pats: [/knock.*retard/, /retard.*knock/, /knock (correction|count)/, /^kr$/, /^knock$/] }
   ];
 
   /* Derived rather than hand-listed, so it can never drift from CHAN. */
@@ -60,15 +84,75 @@
      sensor is unplugged) rather than measured. Deliberately excludes vss, load,
      trims and spark, where a steady zero can be a real reading. */
   var ZERO_MEANS_ABSENT = {
-    ect: 1, iat: 1, maf: 1, lam1: 1, lam2: 1, rpm: 1
+    ect: 1, iat: 1, maf: 1, lam1: 1, lam2: 1, rpm: 1,
+    /* a narrow-band O2 sensor never sits at exactly 0 V for a whole log, and a
+       wideband car reports 0 here because it has no narrow-band sensor 1 */
+    o2b1s1: 1, o2b2s1: 1, o2b1s2: 1, o2b2s2: 1, map: 1
   };
+
+  /* ==========================================================
+     ENGINE PROFILES
+     Every threshold that depends on which engine the log came from lives here,
+     so the rules and KPI tiles read one table instead of hard-coded constants.
+     m54 reproduces the constants the app shipped with. l59 values are starting
+     estimates for a 5.3 L Vortec V8 and should be tuned against real logs.
+       idleLo/idleHi    expected warm idle band (rpm), informational
+       rpmRanAbove      engine counts as "running" once it has been seen above this
+       rpmDipBelow      a dip is a stretch under this, after the engine ran
+       rpmStallBelow    a dip that reaches this is a stall
+       idleHuntSd       warm idle rpm spread above which idle is "hunting"
+       ectWarn/ectCrit  coolant limits (°C)
+       iatNeutral/iatWarn/iatKpiWarn/iatKpiCrit  intake air limits (°C)
+       trimKpiWarn/trimKpiCrit  KPI trim chip limits (%)
+       extraRules       run the L59-era rules (throttle, MAP, O2, closed loop, knock)
+       idleMapHigh      idle MAP (kPa) above which a vacuum problem is suspected
+     ========================================================== */
+  var PROFILES = {
+    m54: { id: "m54", name: "BMW M54 (inline-6)", idleLo: 650, idleHi: 900,
+           rpmRanAbove: 600, rpmDipBelow: 450, rpmStallBelow: 100, idleHuntSd: 250,
+           ectWarn: 112, ectCrit: 120, iatNeutral: 70, iatWarn: 85, iatKpiWarn: 70, iatKpiCrit: 95,
+           trimKpiWarn: 10, trimKpiCrit: 18, extraRules: false, idleMapHigh: 50,
+           extraWant: [] },
+    l59: { id: "l59", name: "Chevrolet L59 (5.3 L V8)", idleLo: 550, idleHi: 750,
+           rpmRanAbove: 500, rpmDipBelow: 400, rpmStallBelow: 100, idleHuntSd: 200,
+           ectWarn: 110, ectCrit: 120, iatNeutral: 70, iatWarn: 85, iatKpiWarn: 70, iatKpiCrit: 95,
+           trimKpiWarn: 10, trimKpiCrit: 18, extraRules: true, idleMapHigh: 50,
+           extraWant: [["tps", "throttle position"], ["map", "manifold pressure"]] }
+  };
+  var PROFILE_IDS = ["m54", "l59"];
+
+  function profileOf(L) { return PROFILES[L && L.profileId] || PROFILES.m54; }
+
+  /* Pick a default engine profile from what the log contains. The logs carry no
+     engine identifier, so this scores channels that only one of the two cars
+     reports: the BMW has wideband lambda and no MAP PID, a GM V8 reports MAP and
+     narrow-band O2 voltage, and knock retard exists only as a GM enhanced PID.
+     It is only a default — the profile selector overrides it. */
+  function detectProfile(L) {
+    var m = L.mapping, C = L.cols, score = 0, why = [];
+    if (C.map) { score += 2; why.push("manifold pressure present"); }
+    if (C.knock) { score += 2; why.push("knock retard present"); }
+    if (C.o2b1s1 || C.o2b2s1) { score += 2; why.push("narrow-band O2 voltage on sensor 1"); }
+    if (C.lam1 || C.lam2) { score -= 3; why.push("wideband lambda present"); }
+    if (/l59|vortec|silverado|tahoe|suburban|sierra|yukon|chev|gmc|\bgm\b/i.test(L.name || "")) { score += 2; why.push("file name"); }
+    return { id: score >= 2 ? "l59" : "m54", score: score, why: why };
+  }
+
+  /* resolve L.profileId from the override, else from detection */
+  function applyProfile(L) {
+    var d = detectProfile(L);
+    L.profileAuto = d.id;
+    L.profileWhy = d.why;
+    L.profileId = (L.profileOverride && PROFILES[L.profileOverride]) ? L.profileOverride : d.id;
+    return L.profileId;
+  }
 
   /* A parenthesised group is dropped only when it looks like a bare unit
      ("°C", "V", "km/h", "g/s" ...). Loggers such as OBD Fusion also use
      parentheses to carry channel-distinguishing text ("Bank 1  Sensor 2"),
      and blanket-stripping every "(...)" group destroyed that text, silently
      un-mapping every multi-bank O2 and wideband lambda channel. */
-  var UNIT_GROUP = /^(deg\.?\s?[cf]?|°\s?[cf]?|[cf]|rpm|km\/h|km|mph|mi\/h|miles per hour|%|g\/s|lb\/?min|kpa|psi|v|volts?|ft|feet|m|sec|s|λ|lambda)$/i;
+  var UNIT_GROUP = /^(deg\.?\s?[cf]?|°\s?[cf]?|[cf]|rpm|km\/h|km|mph|mi\/h|miles per hour|%|g\/s|lb\/?min|kpa|psi|inhg|v|volts?|ft|feet|m|sec|s|λ|lambda)$/i;
 
   function normHead(h) {
     return String(h)
@@ -93,6 +177,7 @@
       feet: /\bft\b|\bfeet\b/.test(s),
       kpaAbs: /\bkpa\b/.test(s),
       psi: /\bpsi\b/.test(s),
+      inhg: /\bin ?hg\b|inhg/.test(s),
       lbmin: /lb\s?\/?\s?min/.test(s)
     };
   }
@@ -295,6 +380,13 @@
         conv = function (v) { return v * 7.5598; };
         warn.push("Mass air flow was in lb/min and has been converted to g/s.");
       }
+      if (ch.k === "map" && u.psi) {
+        conv = function (v) { return v * 6.894757; };
+        warn.push("Manifold pressure was in psi and has been converted to kPa.");
+      } else if (ch.k === "map" && u.inhg) {
+        conv = function (v) { return v * 3.386389; };
+        warn.push("Manifold pressure was in inHg and has been converted to kPa.");
+      }
       if ((ch.k === "lam1" || ch.k === "lam2") && L.afrCols[ch.k] && L.autoMap[ch.k] === ci) {
         conv = function (v) { return v / STOICH; };
       }
@@ -391,11 +483,27 @@
     C.dt = dt;
 
     /* ---- operating state, using whatever channels exist ----
-     * There is no throttle channel. "idle" is road speed 0 when the log has road
-     * speed, otherwise a running engine under 1200 rpm; "driving" is road speed
-     * over 5 km/h, otherwise over 1600 rpm. Frames between are "other". */
+     * "idle" is road speed 0 when the log has road speed, otherwise a running
+     * engine under 1200 rpm; "driving" is road speed over 5 km/h, otherwise over
+     * 1600 rpm. Frames between are "other". Without road speed but with a
+     * throttle channel, throttle position decides closed vs open (see below). */
     var st = new Array(n);
     var hasEct = !!C.ect, hasVss = !!C.vss, hasRpm = !!C.rpm;
+    /* Throttle position refines the road-speed-less fallback only. "Absolute
+       throttle position" does not read 0 % at idle (about 10 % on the BMW), so
+       the closed-throttle level is taken from the log itself: the 10th
+       percentile of the throttle channel, plus a small margin. With road speed
+       present the classification is unchanged. */
+    var tpsIdleMax = null, tpsOpenMin = null;
+    if (!hasVss && C.tps) {
+      var tv = [];
+      for (var tq = 0; tq < n; tq++) if (C.tps[tq] != null && isFinite(C.tps[tq])) tv.push(C.tps[tq]);
+      if (tv.length > 10) {
+        tv.sort(function (p, q) { return p - q; });
+        var tlo = tv[Math.floor(tv.length * 0.1)];
+        tpsIdleMax = tlo + 4; tpsOpenMin = tlo + 12;
+      }
+    }
     for (var g = 0; g < n; g++) {
       /* a missing value is unknown, never "closed" or "cold": null compares as 0 */
       if (hasEct && C.ect[g] == null) { st[g] = "other"; continue; }
@@ -403,6 +511,10 @@
       var running = hasRpm ? C.rpm[g] > 300 : true;
       var closedThrottle = hasVss ? C.vss[g] === 0 : (hasRpm ? C.rpm[g] > 0 && C.rpm[g] < 1200 : false);
       var openThrottle = hasVss ? C.vss[g] > 5 : (hasRpm ? C.rpm[g] > 1600 : false);
+      if (tpsIdleMax != null && C.tps[g] != null) {
+        closedThrottle = hasRpm ? (C.rpm[g] > 0 && C.rpm[g] < 1500 && C.tps[g] <= tpsIdleMax) : C.tps[g] <= tpsIdleMax;
+        openThrottle = C.tps[g] >= tpsOpenMin || (hasRpm && C.rpm[g] > 1600);
+      }
       if (hasEct && !warmv && running) st[g] = "warmup";
       else if (warmv && running && closedThrottle) st[g] = "idle";
       else if (warmv && running && openThrottle) st[g] = "driving";
@@ -415,5 +527,6 @@
     CHAN.forEach(function (ch) { if (C[ch.k]) L.have[ch.k] = true; });
     ["tt1", "tt2", "lean", "dt"].forEach(function (k3) { if (C[k3]) L.have[k3] = true; });
     L.unitWarnings = warn;
+    applyProfile(L);
     return L;
   }

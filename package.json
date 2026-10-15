@@ -1,12 +1,12 @@
 {
   "name": "datalog-bench",
   "version": "0.1.0",
-  "description": "Browser-based analyser for BMW M54 OBD-II datalogs",
+  "description": "Browser-based analyser for OBD-II datalogs (BMW M54, Chevrolet L59)",
   "license": "MIT",
   "private": true,
   "engines": { "node": ">=22.5" },
   "scripts": {
-    "test": "node test/run.mjs && node --test test/parse.test.mjs",
+    "test": "node test/run.mjs && node --test test/parse.test.mjs test/profile.test.mjs",
     "test:db": "node --test test/db.test.mjs"
   }
 }

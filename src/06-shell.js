@@ -1,13 +1,13 @@
   /* ==========================================================
      KPIs — the first six that this log can actually support
      ========================================================== */
-  /* Idle-speed spread (rpm, standard deviation) above which the tile says
-     "hunting". Without a road-speed channel, "idle" also takes in coasting and
-     the fall back to idle after a lift-off, so a healthy warm idle measures
-     about 140-180 rpm here. 250 rpm is a surge a driver would clearly notice. */
-  var IDLE_HUNT_SD = 250;
-
+  /* The idle-hunting spread, coolant, intake-air and trim limits come from the
+     active engine profile (see PROFILES in 02-parse.js). On the M54 profile the
+     hunting limit is 250 rpm: without a road-speed channel, "idle" also takes in
+     coasting and the fall back to idle after a lift-off, so a healthy warm idle
+     measures about 140-180 rpm there. */
   function drawKpis() {
+    var P = profileOf(L);
     var host = document.getElementById("kpis");
     host.textContent = "";
     var sel = VIEW, cand = [];
@@ -23,21 +23,21 @@
     if (HAVE.tt1) {
       var m1 = medOf(pick(C.tt1, trimSel));
       cand.push({ k: HAVE.tt2 ? "Trim, bank 1" : "Fuel trim", v: sgn(m1, 1), u: "%", sub: "median STFT+LTFT",
-        chip: sev(m1 == null ? null : Math.abs(m1), 10, 18),
-        lab: m1 == null ? "no data" : Math.abs(m1) >= 18 ? "out of authority" : Math.abs(m1) >= 10 ? "over limit" : "in range" });
+        chip: sev(m1 == null ? null : Math.abs(m1), P.trimKpiWarn, P.trimKpiCrit),
+        lab: m1 == null ? "no data" : Math.abs(m1) >= P.trimKpiCrit ? "out of authority" : Math.abs(m1) >= P.trimKpiWarn ? "over limit" : "in range" });
     }
     if (HAVE.tt2) {
       var m2 = medOf(pick(C.tt2, trimSel));
       cand.push({ k: "Trim, bank 2", v: sgn(m2, 1), u: "%", sub: "median STFT+LTFT",
-        chip: sev(m2 == null ? null : Math.abs(m2), 10, 18),
-        lab: m2 == null ? "no data" : Math.abs(m2) >= 18 ? "out of authority" : Math.abs(m2) >= 10 ? "over limit" : "in range" });
+        chip: sev(m2 == null ? null : Math.abs(m2), P.trimKpiWarn, P.trimKpiCrit),
+        lab: m2 == null ? "no data" : Math.abs(m2) >= P.trimKpiCrit ? "out of authority" : Math.abs(m2) >= P.trimKpiWarn ? "over limit" : "in range" });
     }
     if (HAVE.ect) { var e = peak("ect");
       cand.push({ k: "Peak coolant", v: fmt(e, 0), u: "°C", sub: "highest in window",
-        chip: sev(e, 112, 120), lab: e == null ? "no data" : e >= 120 ? "overheating" : e >= 112 ? "hot" : "normal" }); }
+        chip: sev(e, P.ectWarn, P.ectCrit), lab: e == null ? "no data" : e >= P.ectCrit ? "overheating" : e >= P.ectWarn ? "hot" : "normal" }); }
     if (HAVE.iat) { var a = peak("iat");
       cand.push({ k: "Peak intake air", v: fmt(a, 0), u: "°C", sub: "charge temperature",
-        chip: sev(a, 70, 95), lab: a == null ? "no data" : a >= 95 ? "very hot" : a >= 70 ? "hot" : "normal" }); }
+        chip: sev(a, P.iatKpiWarn, P.iatKpiCrit), lab: a == null ? "no data" : a >= P.iatKpiCrit ? "very hot" : a >= P.iatKpiWarn ? "hot" : "normal" }); }
     if (HAVE.rpm) { var r = peak("rpm");
       cand.push({ k: "Peak engine speed", v: fmt(r, 0), u: "rpm", sub: "highest in window", chip: "neutral", lab: "logged" }); }
     if (HAVE.rpm) {
@@ -46,13 +46,25 @@
       if (iv.length >= 8) {
         var isd = Math.sqrt(iv.reduce(function (a, x) { var d = x - medOf(iv); return a + d * d; }, 0) / iv.length);
         cand.push({ k: "Idle speed", v: fmt(medOf(iv), 0), u: "rpm", sub: "spread " + fmt(isd, 0) + " rpm, " + iv.length + " frames",
-          chip: isd > IDLE_HUNT_SD ? "warning" : "good", lab: isd > IDLE_HUNT_SD ? "hunting" : "steady" });
+          chip: isd > P.idleHuntSd ? "warning" : "good", lab: isd > P.idleHuntSd ? "hunting" : "steady" });
       }
       var rs = rpmStability(L, sel);
-      cand.push({ k: "Stalls", v: String(rs.stalls), u: "", sub: rs.dips + " dip" + (rs.dips === 1 ? "" : "s") + " under 450 rpm" + (rs.lowest != null ? ", lowest " + Math.round(rs.lowest) : ""),
+      cand.push({ k: "Stalls", v: String(rs.stalls), u: "", sub: rs.dips + " dip" + (rs.dips === 1 ? "" : "s") + " under " + P.rpmDipBelow + " rpm" + (rs.lowest != null ? ", lowest " + Math.round(rs.lowest) : ""),
         chip: rs.stalls ? "critical" : rs.dips ? "warning" : "good",
         lab: rs.stalls ? "engine stopped" : rs.dips ? "near stall" : "none seen" });
     }
+    if (HAVE.map) {
+      var mapIdle = sel.filter(function (i) { return ST[i] === "idle" && (!HAVE.ect || C.ect[i] > 70); });
+      var mv = pick(C.map, mapIdle).filter(function (x) { return x != null; });
+      if (mv.length >= 8) {
+        var mm = medOf(mv);
+        cand.push({ k: "Idle manifold", v: fmt(mm, 0), u: "kPa", sub: "absolute, " + mv.length + " idle frames",
+          chip: mm > P.idleMapHigh ? "warning" : "good", lab: mm > P.idleMapHigh ? "weak vacuum" : "healthy" });
+      }
+    }
+    if (HAVE.knock) { var kr = peak("knock");
+      cand.push({ k: "Peak knock retard", v: fmt(kr, 1), u: "°", sub: "highest in window",
+        chip: sev(kr, 4, 8), lab: kr == null ? "no data" : kr >= 8 ? "heavy" : kr >= 4 ? "notable" : kr > 0.5 ? "light" : "none" }); }
     if (HAVE.vss) { var s = peak("vss");
       cand.push({ k: "Peak road speed", v: fmt(s, 0), u: "km/h", sub: "highest in window", chip: "neutral", lab: "logged" }); }
     if (!L.noTime) {
@@ -118,6 +130,30 @@
     row("Mapped channels", Object.keys(L.mapping).length + " of " + CHAN.length);
     row("Time base", L.noTime ? "frame index (no time column)" : "elapsed seconds");
     if (rep.decComma) row("Decimals", "comma");
+
+    /* engine profile: auto-detected from the channels, with a manual override */
+    (function () {
+      var d = el("div"); d.appendChild(el("dt", null, "Engine profile"));
+      var dd = el("dd"), ps = document.createElement("select");
+      ps.setAttribute("aria-label", "Engine profile");
+      var oa = document.createElement("option");
+      oa.value = ""; oa.textContent = "Auto (" + PROFILES[L.profileAuto].name + ")";
+      ps.appendChild(oa);
+      PROFILE_IDS.forEach(function (id) {
+        var o = document.createElement("option"); o.value = id; o.textContent = PROFILES[id].name; ps.appendChild(o);
+      });
+      ps.value = L.profileOverride || "";
+      ps.addEventListener("change", function () {
+        L.profileOverride = ps.value || null;
+        applyProfile(L);
+        analyze(L);
+        activate(AI, true);
+      });
+      dd.appendChild(ps);
+      if (!L.profileOverride && L.profileWhy && L.profileWhy.length)
+        dd.appendChild(el("small", null, " detected from: " + L.profileWhy.join(", ")));
+      d.appendChild(dd); host.appendChild(d);
+    })();
 
     var wl = document.getElementById("parse-warnings");
     wl.textContent = "";

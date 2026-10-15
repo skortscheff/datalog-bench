@@ -4,7 +4,7 @@
      when they are absent. A rule that passes still reports, so
      a healthy log says so rather than going quiet.
      ========================================================== */
-  var RULESET_VERSION = "1.0.0";
+  var RULESET_VERSION = "1.1.0";
   var SEV_RANK = { critical: 0, serious: 1, warning: 2, neutral: 3, good: 4 };
 
   function med(a) {
@@ -180,7 +180,7 @@
         var idleMed = x.byState.idle.length > 8 ? med(at(x.C.iat, x.byState.idle)) : null;
         var ev = [["peak", n1(mx, 0) + " °C"], ["median", n1(mdn, 0) + " °C"]];
         if (idleMed != null) ev.push(["idle median", n1(idleMed, 0) + " °C"]);
-        var sev = mx >= 85 ? "warning" : mx >= 70 ? "neutral" : "good";
+        var sev = mx >= x.P.iatWarn ? "warning" : mx >= x.P.iatNeutral ? "neutral" : "good";
         if (sev === "good") return { sev: "good", tag: "Intake air",
           h: "Intake air stays cool",
           p: "Intake air peaks at " + n1(mx, 0) + " °C with a median of " + n1(mdn, 0) +
@@ -208,9 +208,10 @@
         var tWarm = null;
         for (i = 0; i < x.n; i++) if (x.C.ect[i] != null && x.C.ect[i] >= 80) { tWarm = x.C.t[i]; break; }
         if (tWarm != null && !x.noTime) ev.push(["to 80 °C", Math.round(tWarm) + " s"]);
-        /* general-purpose limits, not sourced from BMW documentation: a healthy M54
-           runs well above 100 °C under load, so the old 105 °C line was too low */
-        var sev = mx >= 120 ? "critical" : mx >= 112 ? "warning" : "good";
+        /* general-purpose limits taken from the engine profile, not sourced from
+           manufacturer documentation: a healthy M54 runs well above 100 °C under
+           load, so the old 105 °C line was too low */
+        var sev = mx >= x.P.ectCrit ? "critical" : mx >= x.P.ectWarn ? "warning" : "good";
         if (sev === "good") return { sev: "good", tag: "Cooling",
           h: "Coolant temperature stayed normal",
           p: "Coolant peaks at " + n1(mx, 0) + " °C" + (mdn != null ? " and holds a median of " + n1(mdn, 0) + " °C once warm" : "") +
@@ -342,12 +343,247 @@
           ev: ev };
       } },
 
+    /* ======================================================
+       Rules below carry `extra: true`: they run only when the
+       active engine profile enables them (the L59 profile). They
+       are written against standard OBD-II PIDs, so each one says
+       what it can and cannot conclude.
+       ====================================================== */
+
+    /* ---------------- throttle ---------------- */
+    { id: "throttle", need: ["tps"], extra: true,
+      run: function (x) {
+        var v = [], i;
+        for (i = 0; i < x.n; i++) if (x.C.tps[i] != null && isFinite(x.C.tps[i])) v.push(x.C.tps[i]);
+        if (v.length < 12) return null;
+        var lo = pct(v, 0.05), pk = pct(v, 1), wot = 0;
+        for (i = 0; i < v.length; i++) if (v[i] >= 85) wot++;
+        var wotShare = wot / v.length * 100;
+        var ev = [["closed-throttle level", n1(lo, 1) + " %"], ["peak", n1(pk, 1) + " %"],
+                  ["frames at 85 % or more", String(wot)]];
+        var rv = x.have.rpm ? at(x.C.rpm, x.all).filter(function (q) { return q != null; }) : [];
+        var rpmSpan = rv.length ? pct(rv, 1) - pct(rv, 0.05) : 0;
+        if (pk - lo < 2 && rpmSpan > 800) return { sev: "warning", tag: "Throttle",
+          h: "Throttle position does not move while engine speed does",
+          p: "Throttle position stays within " + n1(pk - lo, 1) + " % for the whole log while engine speed spans about " + n1(rpmSpan, 0) +
+             " rpm. A throttle sensor or its PID that is stuck, or a column that is not what its name says, would look like this. Every check that relies on throttle position was weakened by it.",
+          ev: ev };
+        var r = (x.have.load && pk - lo > 20) ? corr(x.C.tps, x.C.load) : null;
+        if (r != null) ev.push(["throttle vs load r", n1(r, 2)]);
+        if (r != null && r < 0.3) return { sev: "warning", tag: "Throttle",
+          h: "Throttle position and calculated load do not track each other",
+          p: "Across this log throttle position moves " + n1(pk - lo, 0) + " % but its correlation with calculated load is only r=" + n1(r, 2) +
+             ". On a drive-by-wire engine the two normally rise together. Look at the throttle position sensor, the electronic throttle body, or whether the logger is reading throttle and load at very different times.",
+          ev: ev };
+        return { sev: "good", tag: "Throttle",
+          h: "Throttle position moves with the driver",
+          p: "Throttle sits at about " + n1(lo, 1) + " % closed (absolute throttle position does not read 0 % at idle) and reaches " + n1(pk, 1) + " %" +
+             (wot ? ", with " + wot + " frame" + (wot > 1 ? "s" : "") + " (" + n1(wotShare, 1) + " %) at or above 85 %" : "") +
+             (r != null ? ". It tracks calculated load (r=" + n1(r, 2) + ")" : "") + ".",
+          ev: ev };
+      } },
+
+    /* ---------------- idle manifold pressure ---------------- */
+    { id: "map-idle", need: ["map"], extra: true,
+      run: function (x) {
+        var idle = x.byState.idle;
+        if (idle.length < 10) return null;
+        var vals = at(x.C.map, idle), m = med(vals), p95 = pct(vals, 0.95);
+        if (m == null) return null;
+        var lim = x.P.idleMapHigh;
+        var ev = [["idle median", n1(m, 0) + " kPa"], ["idle p95", n1(p95, 0) + " kPa"], ["idle frames", String(idle.length)]];
+        if (x.have.rpm) ev.push(["idle rpm", n1(med(at(x.C.rpm, idle)), 0)]);
+        if (m > lim) return { sev: m > lim + 12 ? "serious" : "warning", tag: "Manifold pressure",
+          h: "Idle manifold vacuum is weak (" + n1(m, 0) + " kPa absolute)",
+          p: "At warm idle the manifold sits at a median of " + n1(m, 0) + " kPa absolute, above the " + lim +
+             " kPa this profile treats as a healthy upper bound (a healthy V8 idles with strong vacuum, around 30-45 kPa absolute at sea level; altitude raises every reading). Weak idle vacuum points at a vacuum or intake leak, a leaking brake booster or PCV line, valve or cam timing problems, or an engine idling above its design speed.",
+          ev: ev };
+        return { sev: "good", tag: "Manifold pressure",
+          h: "Idle manifold vacuum looks healthy",
+          p: "Warm idle holds a median of " + n1(m, 0) + " kPa absolute (p95 " + n1(p95, 0) + " kPa), at or below the " + lim +
+             " kPa limit, so there is no sign of a large intake leak. Altitude raises these numbers, so compare at your own baseline.",
+          ev: ev };
+      } },
+
+    /* ---------------- airflow vs manifold pressure ---------------- */
+    { id: "map-airflow", need: ["map", "maf", "rpm"], extra: true,
+      run: function (x) {
+        var a = [], b = [], i;
+        for (i = 0; i < x.n; i++) {
+          var mp = x.C.map[i], mf = x.C.maf[i], rp = x.C.rpm[i];
+          if (mp == null || mf == null || rp == null || rp < 500) continue;
+          a.push(mf); b.push(mp * rp / 1000);
+        }
+        if (a.length < 40) return null;
+        var r = corr(a, b);
+        if (r == null) return null;
+        var ev = [["MAF vs MAP×rpm r", n1(r, 2)], ["frames", String(a.length)]];
+        if (r < 0.6) return { sev: "warning", tag: "Airflow",
+          h: "Measured airflow does not follow manifold pressure and engine speed",
+          p: "On a speed-density basis, air mass flow should scale with manifold pressure times engine speed. Here the two correlate at only r=" + n1(r, 2) +
+             " over " + a.length + " running frames. A contaminated or failing MAF, a MAP sensor that is off, or a leak between the MAF and the throttle (unmetered air that MAP sees but the MAF does not) would each break the relationship. Check the MAF element, the air filter and intake duct, then the MAP reading at key-on, engine off (should be near barometric).",
+          ev: ev };
+        return { sev: r < 0.85 ? "neutral" : "good", tag: "Airflow",
+          h: r < 0.85 ? "Airflow follows manifold pressure loosely" : "Airflow and manifold pressure agree",
+          p: "Mass airflow correlates with manifold pressure times engine speed at r=" + n1(r, 2) + " over " + a.length +
+             " running frames" + (r < 0.85 ? ", acceptable but looser than a clean log usually shows; slow channel refresh and transients lower it" : ", as expected when both sensors are healthy") + ".",
+          ev: ev };
+      } },
+
+    /* ---------------- oxygen sensor activity ---------------- */
+    { id: "o2-switching", need: ["o2b1s1"], extra: true,
+      run: function (x) {
+        var banks = [["B1", "o2b1s1"]];
+        if (x.have.o2b2s1) banks.push(["B2", "o2b2s1"]);
+        var frames = [], i;
+        for (i = 0; i < x.n; i++) {
+          if (x.C.rpm && (x.C.rpm[i] == null || x.C.rpm[i] < 500)) continue;
+          if (x.C.ect && (x.C.ect[i] == null || x.C.ect[i] <= 70)) continue;
+          if (x.have.fuelsys && x.C.fuelsys[i] != null) { var fs = Math.round(x.C.fuelsys[i]); if (!((fs & 2) || (fs & 16))) continue; }
+          frames.push(i);
+        }
+        if (frames.length < 20) return null;
+        var res = [], bad = [], ev = [];
+        banks.forEach(function (bk) {
+          var col = x.C[bk[1]], v = at(col, frames).filter(function (q) { return q != null; });
+          if (v.length < 20) return;
+          var lo = pct(v, 0.05), hi = pct(v, 0.95), m = med(v), mean = 0;
+          for (var vi = 0; vi < v.length; vi++) mean += v[vi];
+          mean /= v.length;
+          /* crossings of the 0.45 V midline, with hysteresis, over runs of consecutive frames only */
+          var side = null, cross = 0, secs = 0, prev = -2;
+          for (var q = 0; q < frames.length; q++) {
+            var ix = frames[q], val = col[ix];
+            if (val == null) { prev = -2; continue; }
+            if (prev === ix - 1 && !x.noTime) secs += x.C.t[ix] - x.C.t[prev];
+            var s2 = val > 0.55 ? 1 : val < 0.35 ? -1 : side;
+            if (side != null && s2 !== side) cross++;
+            side = s2; prev = ix;
+          }
+          var rate = (!x.noTime && secs > 5) ? cross / secs * 60 : null;
+          var st = (hi - lo) >= 0.3 ? "ok" : m < 0.2 ? "stuck low (lean)" : m > 0.7 ? "stuck high (rich)" : "lazy";
+          res.push({ b: bk[0], lo: lo, hi: hi, m: m, mean: mean, rate: rate, st: st, n: v.length });
+          ev.push([bk[0] + " range", n1(lo, 2) + "–" + n1(hi, 2) + " V"]);
+          if (rate != null) ev.push([bk[0] + " crossings", n1(rate, 0) + " /min"]);
+          if (st !== "ok") bad.push(bk[0] + " " + st);
+        });
+        if (!res.length) return null;
+        var imb = null;
+        /* means, not medians: the median of a signal that flips between two levels jumps between them */
+        if (res.length === 2) { imb = Math.abs(res[0].mean - res[1].mean); ev.push(["bank mean gap", n1(imb, 2) + " V"]); }
+        if (bad.length) return { sev: bad.length > 1 ? "serious" : "warning", tag: "Oxygen sensors",
+          h: "Front oxygen sensor not switching: " + bad.join(", "),
+          p: "A healthy narrow-band sensor swings between roughly 0.1 V and 0.9 V as the ECU trims fuel. Over " + frames.length +
+             " warm, running, closed-loop frames " + bad.join(" and ") + " " + (bad.length > 1 ? "stay" : "stays") +
+             " in a narrow band, so the ECU is correcting against a sensor that is not reporting. A stuck-low reading usually means a lean exhaust or an unplugged/old sensor, stuck-high a rich exhaust, and a small swing about the middle a lazy, contaminated sensor. Fuel trim from that bank should not be trusted until the sensor is ruled out.",
+          ev: ev };
+        if (imb != null && imb > 0.15) return { sev: "neutral", tag: "Oxygen sensors",
+          h: "Front oxygen sensors sit at different average voltages",
+          p: "Both front sensors switch, but their average voltages differ by " + n1(imb, 2) + " V (" + n1(res[0].mean, 2) + " V on bank 1, " + n1(res[1].mean, 2) +
+             " V on bank 2). That fits the banks running at different mixtures; compare with the bank balance check.",
+          ev: ev };
+        return { sev: "good", tag: "Oxygen sensors",
+          h: "Front oxygen sensors are switching",
+          p: "Over " + frames.length + " warm, running, closed-loop frames each front sensor swings across its range" +
+             (res[0].rate != null ? ", about " + n1(res[0].rate, 0) + " crossings a minute on bank 1" : "") +
+             ". Crossing counts depend on how fast the logger samples, so treat them as a floor.",
+          ev: ev };
+      } },
+
+    /* ---------------- closed loop ---------------- */
+    { id: "closed-loop", need: ["fuelsys"], extra: true,
+      run: function (x) {
+        var closed = 0, loadOpen = 0, badOpen = 0, tot = 0, i;
+        for (i = 0; i < x.n; i++) {
+          if (x.C.fuelsys[i] == null) continue;
+          if (x.C.ect && (x.C.ect[i] == null || x.C.ect[i] <= 70)) continue;
+          if (x.C.rpm && (x.C.rpm[i] == null || x.C.rpm[i] < 500)) continue;
+          var v = Math.round(x.C.fuelsys[i]); tot++;
+          if ((v & 2) || (v & 16)) closed++;
+          else if (v & 4) loadOpen++;
+          else badOpen++;      /* 1 = open for low temperature, 8 = open for a fault */
+        }
+        if (tot < 20) return null;
+        var pc = function (q) { return q / tot * 100; };
+        var ev = [["closed loop", n1(pc(closed), 0) + " %"], ["open (load / decel)", n1(pc(loadOpen), 0) + " %"],
+                  ["open (cold / fault)", n1(pc(badOpen), 0) + " %"], ["warm frames", String(tot)]];
+        if (pc(badOpen) >= 25) return { sev: pc(badOpen) >= 50 ? "serious" : "warning", tag: "Closed loop",
+          h: "ECU stays in open loop while warm (" + n1(pc(badOpen), 0) + " % of warm frames)",
+          p: "Once the engine is warm the ECU should run closed loop, using the oxygen sensors. In " + n1(pc(badOpen), 0) +
+             " % of warm running frames fuel system status says open loop for temperature or for a fault (status 1 or 8). Typical causes are a slow or dead front oxygen sensor, a thermostat that keeps the engine below the closed-loop threshold, or a stored sensor fault. Fuel trims are not being corrected live during those frames.",
+          ev: ev };
+        return { sev: "good", tag: "Closed loop",
+          h: "ECU runs closed loop when warm",
+          p: "Of " + tot + " warm running frames, " + n1(pc(closed), 0) + " % are closed loop and " + n1(pc(loadOpen), 0) +
+             " % are open loop for load or deceleration, which is normal. Only " + n1(pc(badOpen), 0) + " % are open for temperature or a fault.",
+          ev: ev };
+      } },
+
+    /* ---------------- knock retard (real PID) ---------------- */
+    { id: "knock", need: ["knock"], extra: true,
+      run: function (x) {
+        var ev0 = [], cur = null, i, worst = 0, worstI = -1;
+        for (i = 0; i < x.n; i++) {
+          var k = x.C.knock[i];
+          if (k != null && k > 0.5) {
+            if (cur == null) { cur = { start: i, peak: k, pi: i }; ev0.push(cur); }
+            if (k > cur.peak) { cur.peak = k; cur.pi = i; }
+            if (k > worst) { worst = k; worstI = i; }
+          } else cur = null;
+        }
+        var ev = [["knock events", String(ev0.length)], ["worst retard", n1(worst, 1) + " °"]];
+        if (worstI >= 0) {
+          if (x.have.rpm) ev.push(["rpm at worst", n1(x.C.rpm[worstI], 0)]);
+          if (x.have.load) ev.push(["load at worst", n1(x.C.load[worstI], 0) + " %"]);
+          if (x.have.map) ev.push(["MAP at worst", n1(x.C.map[worstI], 0) + " kPa"]);
+        }
+        if (!ev0.length) return { sev: "good", tag: "Knock",
+          h: "No knock retard recorded",
+          p: "The knock retard channel stays at zero across all " + x.n + " frames, so the ECU did not pull timing for knock in this log.",
+          ev: ev };
+        var sev = worst >= 8 ? "serious" : (worst >= 4 || ev0.length >= 10) ? "warning" : "neutral";
+        return { sev: sev, tag: "Knock",
+          h: ev0.length + " knock event" + (ev0.length > 1 ? "s" : "") + ", worst " + n1(worst, 1) + " ° of retard",
+          p: "The ECU pulled up to " + n1(worst, 1) + " ° of timing in " + ev0.length + " event" + (ev0.length > 1 ? "s" : "") +
+             (worstI >= 0 && !x.noTime ? ", the worst at " + Math.round(x.C.t[worstI]) + " s" : "") + (worstI >= 0 && x.have.rpm ? " (" + n1(x.C.rpm[worstI], 0) + " rpm)" : "") +
+             ". Occasional single-degree events are normal. Repeated or deep retard points at low-octane fuel, heat soak, carbon deposits, a lean condition, or a failing knock sensor — check intake temperature and fuel trim in the same frames.",
+          ev: ev };
+      } },
+
+    /* ---------------- knock, inferred from timing ---------------- */
+    { id: "knock-inferred", need: ["spark", "rpm"], extra: true,
+      run: function (x) {
+        if (x.have.knock) return null;
+        var steady = x.have.load ? x.C.load : (x.have.tps ? x.C.tps : null);
+        if (!steady || x.n < 60) return null;
+        var hits = [], i;
+        for (i = 1; i < x.n; i++) {
+          var s0 = x.C.spark[i - 1], s1 = x.C.spark[i], r0 = x.C.rpm[i - 1], r1 = x.C.rpm[i], a0 = steady[i - 1], a1 = steady[i];
+          if (s0 == null || s1 == null || r0 == null || r1 == null || a0 == null || a1 == null) continue;
+          if (r1 < 1200) continue;
+          if (Math.abs(r1 - r0) < 150 && Math.abs(a1 - a0) < 6 && s0 - s1 >= 5) hits.push(i);
+        }
+        var ev = [["sudden timing drops", String(hits.length)]];
+        if (!hits.length) return { sev: "good", tag: "Knock (inferred)",
+          h: "No sudden timing pulls at steady speed and load",
+          p: "This log has no knock retard channel, so knock is inferred from timing advance: a drop of 5° or more in a single frame while engine speed and " +
+             (x.have.load ? "load" : "throttle") + " barely changed. None were found. That is weaker evidence than a real knock channel, since small retards fall below what this check sees.",
+          ev: ev };
+        return { sev: hits.length >= 8 ? "warning" : "neutral", tag: "Knock (inferred)",
+          h: hits.length + " sudden timing pull" + (hits.length > 1 ? "s" : "") + " at steady speed and load (inferred)",
+          p: "There is no knock retard channel in this log, so this is inferred from timing advance: " + hits.length +
+             " frame" + (hits.length > 1 ? "s" : "") + " where advance fell by 5° or more while engine speed and " + (x.have.load ? "load" : "throttle") +
+             " barely moved. Knock retard looks exactly like this, but so do torque management and shift events, so treat it as a lead. Add a GM knock retard PID to your logger to confirm.",
+          ev: ev };
+      } },
+
     /* ---------------- channel coverage ---------------- */
     { id: "coverage", need: [],
       run: function (x) {
         var want = [["rpm", "engine speed"], ["vss", "vehicle speed"], ["ect", "coolant temperature"],
                     ["iat", "intake air temperature"], ["maf", "mass air flow"], ["stft1", "short-term fuel trim"],
                     ["ltft1", "long-term fuel trim"]];
+        want = want.concat(x.P.extraWant || []);
         var miss = [];
         for (var i = 0; i < want.length; i++) if (!x.have[want[i][0]]) miss.push(want[i][1]);
         if (!miss.length) return null;
@@ -392,8 +628,8 @@
      and the key-off tail (a dip that runs to the last frame of the log) are not
      counted. Channels refresh slowly, so a dip shorter than one refresh can be
      missed: these are minimum counts. */
-  var RPM_RAN_ABOVE = 600, RPM_DIP_BELOW = 450, RPM_STALL_BELOW = 100;
   function rpmStability(L, idx) {
+    var P = profileOf(L), RPM_RAN_ABOVE = P.rpmRanAbove, RPM_DIP_BELOW = P.rpmDipBelow, RPM_STALL_BELOW = P.rpmStallBelow;
     var rpm = L.cols.rpm, last = L.n - 1, first = -1, i;
     for (i = 0; i <= last; i++) if (rpm[i] != null && rpm[i] >= RPM_RAN_ABOVE) { first = i; break; }
     var dips = 0, stalls = 0, lowest = null, cur = null, k, v;
@@ -478,11 +714,14 @@
     var trimFrames = warm, trimLabel = C.ect ? "warm" : "logged";
     if (trimFrames.length < 12) { trimFrames = all; trimLabel = "logged"; }
 
-    var ctx = { L: L, C: C, n: n, all: all, byState: byState, have: L.have,
+    var ctx = { L: L, C: C, n: n, all: all, byState: byState, have: L.have, P: profileOf(L),
                 trimFrames: trimFrames, trimLabel: trimLabel, noTime: L.noTime };
 
     var out = [], skipped = [];
     RULES.forEach(function (rule) {
+      /* profile-gated rules are not "skipped for missing channels": they simply
+         do not apply to this engine, so they leave no trace in the skipped list */
+      if (rule.extra && !ctx.P.extraRules) return;
       for (var k = 0; k < rule.need.length; k++) if (!L.have[rule.need[k]]) { skipped.push({ id: rule.id, missing: rule.need[k] }); return; }
       var f;
       try { f = rule.run(ctx); } catch (e) { f = null; }
