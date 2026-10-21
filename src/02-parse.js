@@ -70,14 +70,50 @@
     { k: "o2b2s2", nm: "O2 voltage B2 S2 (post-cat)", unit: "V", grp: "mix",
       pats: [/volt.*bank ?2.*sensor ?2\b/, /bank ?2.*sensor ?2.*volt/, /^o2 ?b2 ?s2\b/] },
     { k: "knock",  nm: "Knock retard",        unit: "deg",  grp: "core",
-      pats: [/knock.*retard/, /retard.*knock/, /knock (correction|count)/, /^kr$/, /^knock$/] }
+      pats: [/knock.*retard/, /retard.*knock/, /knock (correction|count)/, /^kr$/, /^knock$/] },
+
+    /* Channels below were added for the Mitsubishi Evo profile. EvoScan reads
+       the ECU over MUT, not OBD-II, so these have only `evo` patterns, which
+       are tried only on an EvoScan file: generic names such as "Air Flow" or
+       "Battery" mean something else in other loggers. */
+    { k: "knocksum", nm: "Knock sum",          unit: "count", grp: "core", pats: [],
+      evo: [/^knocksum$/] },
+    { k: "mafhz",  nm: "Airflow (MAF frequency)", unit: "Hz", grp: "core", pats: [],
+      evo: [/^airflow$/] },
+    { k: "injdc",  nm: "Injector duty cycle",  unit: "%",   grp: "mix",  pats: [],
+      evo: [/^injdutycycle$/] },
+    { k: "batt",   nm: "Battery voltage",      unit: "V",   grp: "core", pats: [],
+      evo: [/^battery$/] }
   ];
+
+  /* EvoScan names its columns in CamelCase with no units ("CoolantTemp",
+     "LogEntrySeconds"), which normHead turns into single words the generic
+     patterns cannot match. These are tried first on an EvoScan file only. */
+  var EVO_PATS = {
+    t: [/^logentryseconds$/],
+    load: [/^load1b$/, /^loadmut2byte$/, /^load ?calc$/, /^ecu ?load$/],
+    spark: [/^timingadv$/],
+    ect: [/^coolanttemp$/],
+    iat: [/^airtemp$/],
+    stft1: [/^o2feedbacktrim$/],
+    ltft1: [/^fueltrim inuse$/],
+    o2b1s1: [/^o2sensor$/],
+    o2b1s2: [/^o2sensor2$/]
+  };
+  CHAN.forEach(function (c) { if (EVO_PATS[c.k]) c.evo = EVO_PATS[c.k]; });
+
+  /* An EvoScan CSV starts with these bookkeeping columns, whatever items the
+     user chose to log. */
+  function detectSource(normed) {
+    var s = {}; normed.forEach(function (h) { s[h] = 1; });
+    return (s.logid && s.logentrydate && s.logentryseconds) ? "evoscan" : "generic";
+  }
 
   /* Derived rather than hand-listed, so it can never drift from CHAN. */
   var PID_PROFILE = CHAN.map(function (c) { return c.k; });
 
   /* AFR columns are read into lambda; the M54 is gasoline, so 14.7 is exact. */
-  var AFR_PATS = [/air ?[\/ ]?fuel ratio/, /^afr/];
+  var AFR_PATS = [/air ?[\/ ]?fuel ratio/, /^afr/, /^wide ?band ?af$/];
   var STOICH = 14.7;
 
   /* Channels where a constant-zero column means the PID is unsupported (or the
@@ -87,8 +123,16 @@
     ect: 1, iat: 1, maf: 1, lam1: 1, lam2: 1, rpm: 1,
     /* a narrow-band O2 sensor never sits at exactly 0 V for a whole log, and a
        wideband car reports 0 here because it has no narrow-band sensor 1 */
-    o2b1s1: 1, o2b2s1: 1, o2b1s2: 1, o2b2s2: 1, map: 1
+    o2b1s1: 1, o2b2s1: 1, o2b1s2: 1, o2b2s2: 1, map: 1,
+    /* EvoScan writes 0 for an item the ECU does not answer */
+    mafhz: 1, injdc: 1, batt: 1
   };
+
+  /* Short-term trim on a closed-loop engine moves all the time, so a short-term
+     trim that is exactly zero in every one of this many frames was not
+     answered by the ECU. A long-term trim stuck at zero beside it is dropped
+     too. EvoScan logs of some Evo ECUs look like this. */
+  var DEAD_TRIM_FRAMES = 100;
 
   /* ==========================================================
      ENGINE PROFILES
@@ -104,31 +148,60 @@
        ectWarn/ectCrit  coolant limits (°C)
        iatNeutral/iatWarn/iatKpiWarn/iatKpiCrit  intake air limits (°C)
        trimKpiWarn/trimKpiCrit  KPI trim chip limits (%)
-       extraRules       run the L59-era rules (throttle, MAP, O2, closed loop, knock)
        idleMapHigh      idle MAP (kPa) above which a vacuum problem is suspected
+       want             channels the coverage check asks for, [key, label]
+       logger           what the coverage check tells the user to add PIDs in
+       short/blurb/loggerNote  labels for the vehicle picker
+     Rules marked `only` in 03-analyze.js run for the profiles they list.
+     evo values are starting estimates for a stock 4G63T Evo IV-IX and should be
+     tuned against more real logs.
      ========================================================== */
+  var BASE_WANT = [["rpm", "engine speed"], ["vss", "vehicle speed"], ["ect", "coolant temperature"],
+                   ["iat", "intake air temperature"], ["maf", "mass air flow"], ["stft1", "short-term fuel trim"],
+                   ["ltft1", "long-term fuel trim"]];
   var PROFILES = {
-    m54: { id: "m54", name: "BMW M54 (inline-6)", idleLo: 650, idleHi: 900,
+    m54: { id: "m54", name: "BMW M54 (inline-6)", short: "BMW M54",
+           blurb: "2.2–3.0 L inline-6: E39, E46, E60, E83, Z4",
+           loggerNote: "OBD-II app CSV (OBD Fusion, Torque, Car Scanner)",
+           idleLo: 650, idleHi: 900,
            rpmRanAbove: 600, rpmDipBelow: 450, rpmStallBelow: 100, idleHuntSd: 250,
            ectWarn: 112, ectCrit: 120, iatNeutral: 70, iatWarn: 85, iatKpiWarn: 70, iatKpiCrit: 95,
-           trimKpiWarn: 10, trimKpiCrit: 18, extraRules: false, idleMapHigh: 50,
-           extraWant: [] },
-    l59: { id: "l59", name: "Chevrolet L59 (5.3 L V8)", idleLo: 550, idleHi: 750,
+           trimKpiWarn: 10, trimKpiCrit: 18, idleMapHigh: 50,
+           want: BASE_WANT, logger: "your logger's PID list" },
+    l59: { id: "l59", name: "Chevrolet L59 (5.3 L V8)", short: "Chevy L59",
+           blurb: "5.3 L Vortec flex-fuel V8: Silverado, Tahoe, Suburban",
+           loggerNote: "OBD-II app CSV; GM knock retard as an enhanced PID",
+           idleLo: 550, idleHi: 750,
            rpmRanAbove: 500, rpmDipBelow: 400, rpmStallBelow: 100, idleHuntSd: 200,
            ectWarn: 110, ectCrit: 120, iatNeutral: 70, iatWarn: 85, iatKpiWarn: 70, iatKpiCrit: 95,
-           trimKpiWarn: 10, trimKpiCrit: 18, extraRules: true, idleMapHigh: 50,
-           extraWant: [["tps", "throttle position"], ["map", "manifold pressure"]] }
+           trimKpiWarn: 10, trimKpiCrit: 18, idleMapHigh: 50,
+           want: BASE_WANT.concat([["tps", "throttle position"], ["map", "manifold pressure"]]),
+           logger: "your logger's PID list" },
+    evo: { id: "evo", name: "Mitsubishi Lancer Evolution IV–IX (4G63T)", short: "Mitsubishi Evo",
+           blurb: "2.0 L turbo inline-4, MUT-protocol ECU",
+           loggerNote: "EvoScan CSV",
+           idleLo: 750, idleHi: 950,
+           rpmRanAbove: 600, rpmDipBelow: 500, rpmStallBelow: 100, idleHuntSd: 200,
+           ectWarn: 105, ectCrit: 112, iatNeutral: 50, iatWarn: 65, iatKpiWarn: 55, iatKpiCrit: 70,
+           trimKpiWarn: 10, trimKpiCrit: 18, idleMapHigh: 50,
+           want: [["rpm", "engine speed (RPM)"], ["vss", "vehicle speed (Speed)"], ["ect", "coolant temperature (CoolantTemp)"],
+                  ["iat", "intake air temperature (AirTemp)"], ["mafhz", "airflow (AirFlow)"],
+                  ["stft1", "short-term fuel trim (O2FeedbackTrim)"], ["ltft1", "long-term fuel trim (FuelTrim_InUse)"],
+                  ["tps", "throttle position (TPS)"], ["knocksum", "knock sum (KnockSum)"]],
+           logger: "the EvoScan logging list" }
   };
-  var PROFILE_IDS = ["m54", "l59"];
+  var PROFILE_IDS = ["m54", "l59", "evo"];
 
   function profileOf(L) { return PROFILES[L && L.profileId] || PROFILES.m54; }
 
   /* Pick a default engine profile from what the log contains. The logs carry no
-     engine identifier, so this scores channels that only one of the two cars
+     engine identifier, so this scores channels that only one of the cars
      reports: the BMW has wideband lambda and no MAP PID, a GM V8 reports MAP and
      narrow-band O2 voltage, and knock retard exists only as a GM enhanced PID.
-     It is only a default — the profile selector overrides it. */
+     An EvoScan file can only come from a Mitsubishi, so the format decides it.
+     It is only a default — the vehicle selector overrides it. */
   function detectProfile(L) {
+    if (L.source === "evoscan") return { id: "evo", score: 0, why: ["EvoScan log format"] };
     var m = L.mapping, C = L.cols, score = 0, why = [];
     if (C.map) { score += 2; why.push("manifold pressure present"); }
     if (C.knock) { score += 2; why.push("knock retard present"); }
@@ -300,16 +373,18 @@
 
     /* ---- map columns to canonical channels ---- */
     var normed = head.map(normHead);
+    var source = detectSource(normed);
     var claimed = {}, mapping = {}, autoMap = {};
     function claim(ch, idx) { claimed[idx] = ch.k; mapping[ch.k] = idx; autoMap[ch.k] = idx; }
 
     CHAN.forEach(function (ch) {
-      for (var pi = 0; pi < ch.pats.length; pi++) {
+      var pats = (source === "evoscan" && ch.evo) ? ch.evo.concat(ch.pats) : ch.pats;
+      for (var pi = 0; pi < pats.length; pi++) {
         for (var ci = 0; ci < nCol; ci++) {
           if (claimed[ci] != null) continue;
           if (!ch.text && !numeric[ci]) continue;
           if (ch.text && numeric[ci]) continue;
-          if (ch.pats[pi].test(normed[ci])) { claim(ch, ci); return; }
+          if (pats[pi].test(normed[ci])) { claim(ch, ci); return; }
         }
       }
     });
@@ -327,12 +402,11 @@
           }
         }
       }
-      if (afrCols.lam1) warnings.push("No lambda column found, so air/fuel ratio was converted to lambda by dividing by " + STOICH + " (gasoline).");
     }
 
     /* a single-bank log: mirror nothing, just note it */
     var L = {
-      name: name, isSample: !!isSample,
+      name: name, isSample: !!isSample, source: source,
       head: head, normed: normed, raw: raw, numeric: numeric, n: n,
       mapping: mapping, autoMap: autoMap, afrCols: afrCols,
       parserVersion: PARSER_VERSION, pidProfile: PID_PROFILE,
@@ -342,8 +416,58 @@
         preamble: preamble.slice(0, 4), warnings: warnings
       }
     };
+    if (source === "evoscan") L.report.format = "EvoScan";
     buildChannels(L);
     return L;
+  }
+
+  /* true when a column has at least `min` readings and every one is zero */
+  function allZero(arr, min) {
+    var seen = 0;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] == null) continue;
+      if (arr[i] !== 0) return false;
+      seen++;
+    }
+    return seen >= min;
+  }
+
+  /* EvoScan headers carry no units: temperature and speed follow the metric or
+     imperial setting in the user's EvoScan install. Both are read off the data.
+     Coolant in °C cannot sit above 135 for a tenth of a log, while a warm engine
+     in °F always does. The ECU reports speed in steps of 2 km/h, so a speed
+     column whose readings are all multiples of 2 km/h expressed in mph
+     (1.2427 mph) was converted to mph by EvoScan. */
+  var MPH_STEP = 2 / 1.609344;
+  function evoUnits(L, readNum) {
+    var m = L.mapping, out = { fahrenheit: false, mph: false, tempWhy: "", speedWhy: "" };
+    function vals(k) {
+      return m[k] == null ? [] : readNum(m[k], null).filter(function (v) { return v != null; }).sort(function (a, b) { return a - b; });
+    }
+    function p90(v) { return v.length ? v[Math.floor((v.length - 1) * 0.9)] : null; }
+    var ect = vals("ect"), iat = vals("iat");
+    if (ect.length > 10) {
+      out.fahrenheit = p90(ect) > 135;
+      out.tempWhy = "EvoScan does not label units; the coolant readings are only possible in °F, and EvoScan uses one unit for every temperature.";
+    } else if (iat.length > 10) {
+      out.fahrenheit = p90(iat) > 80;
+      out.tempWhy = "EvoScan does not label units; intake air readings this high are only plausible in °F.";
+    }
+    var spd = vals("vss").filter(function (v) { return v > 0; });
+    if (spd.length >= 10) {
+      var onStep = spd.filter(function (v) { var q = v / MPH_STEP; return Math.abs(q - Math.round(q)) < 0.01; }).length;
+      if (onStep / spd.length >= 0.9) {
+        out.mph = true;
+        out.speedWhy = "EvoScan does not label units; every reading is a whole number of 2 km/h steps expressed in mph.";
+      }
+    }
+    /* readings in whole 2 km/h steps are km/h; anything else follows the temperature unit */
+    var kmhSteps = spd.every(function (v) { return Math.abs(v / 2 - Math.round(v / 2)) < 0.01; });
+    if (!out.mph && out.fahrenheit && spd.length && !kmhSteps) {
+      out.mph = true;
+      out.speedWhy = "EvoScan does not label units; temperatures were in °F, so speed is assumed to be in mph as well.";
+    }
+    return out;
   }
 
   /* ==========================================================
@@ -364,17 +488,19 @@
       return out;
     }
 
+    var evoU = L.source === "evoscan" ? evoUnits(L, readNum) : null;
+
     CHAN.forEach(function (ch) {
       var ci = m[ch.k];
       if (ci == null || ch.text) return;
       var u = unitOf(L.head[ci]), conv = null;
-      if ((ch.k === "ect" || ch.k === "iat") && u.fahrenheit) {
+      if ((ch.k === "ect" || ch.k === "iat") && (u.fahrenheit || (evoU && evoU.fahrenheit))) {
         conv = function (v) { return (v - 32) * 5 / 9; };
-        warn.push(ch.nm + " was in °F and has been converted to °C.");
+        warn.push(ch.nm + " was in °F and has been converted to °C." + (u.fahrenheit ? "" : " " + evoU.tempWhy));
       }
-      if (ch.k === "vss" && u.mph) {
+      if (ch.k === "vss" && (u.mph || (evoU && evoU.mph))) {
         conv = function (v) { return v * 1.609344; };
-        warn.push("Vehicle speed was in mph and has been converted to km/h.");
+        warn.push("Vehicle speed was in mph and has been converted to km/h." + (u.mph ? "" : " " + evoU.speedWhy));
       }
       if (ch.k === "maf" && u.lbmin) {
         conv = function (v) { return v * 7.5598; };
@@ -412,6 +538,19 @@
         }
       }
       C[ch.k] = arr;
+    });
+
+    /* said only once the converted channel has survived the zero check above */
+    if (C.lam1 && L.afrCols.lam1 && L.autoMap.lam1 === m.lam1)
+      warn.push("No lambda column found, so air/fuel ratio was converted to lambda by dividing by " + STOICH + " (gasoline).");
+
+    [["stft1", "ltft1"], ["stft2", "ltft2"]].forEach(function (pair) {
+      if (!C[pair[0]] || !allZero(C[pair[0]], DEAD_TRIM_FRAMES)) return;
+      pair.forEach(function (k) {
+        if (k !== pair[0] && (!C[k] || !allZero(C[k], DEAD_TRIM_FRAMES))) return;
+        warn.push("“" + L.head[m[k]] + "” read exactly zero in every frame. A working closed-loop trim never does that, so the ECU did not answer it and the channel was dropped rather than analysed.");
+        delete C[k]; delete m[k];
+      });
     });
 
     /* ---- time base ---- */
@@ -493,9 +632,10 @@
        throttle position" does not read 0 % at idle (about 10 % on the BMW), so
        the closed-throttle level is taken from the log itself: the 10th
        percentile of the throttle channel, plus a small margin. With road speed
-       present the classification is unchanged. */
+       present, throttle only removes free revs at standstill from idle, and only
+     on EvoScan logs. */
     var tpsIdleMax = null, tpsOpenMin = null;
-    if (!hasVss && C.tps) {
+    if (C.tps) {
       var tv = [];
       for (var tq = 0; tq < n; tq++) if (C.tps[tq] != null && isFinite(C.tps[tq])) tv.push(C.tps[tq]);
       if (tv.length > 10) {
@@ -511,7 +651,12 @@
       var running = hasRpm ? C.rpm[g] > 300 : true;
       var closedThrottle = hasVss ? C.vss[g] === 0 : (hasRpm ? C.rpm[g] > 0 && C.rpm[g] < 1200 : false);
       var openThrottle = hasVss ? C.vss[g] > 5 : (hasRpm ? C.rpm[g] > 1600 : false);
-      if (tpsIdleMax != null && C.tps[g] != null) {
+      /* standing still with the throttle open is a free rev, not idle. Limited
+         to EvoScan logs for now: on the OBD logs it would move existing results */
+      if (hasVss && tpsIdleMax != null && C.tps[g] != null) {
+        if (L.source === "evoscan") closedThrottle = closedThrottle && C.tps[g] <= tpsIdleMax;
+      }
+      else if (tpsIdleMax != null && C.tps[g] != null) {
         closedThrottle = hasRpm ? (C.rpm[g] > 0 && C.rpm[g] < 1500 && C.tps[g] <= tpsIdleMax) : C.tps[g] <= tpsIdleMax;
         openThrottle = C.tps[g] >= tpsOpenMin || (hasRpm && C.rpm[g] > 1600);
       }

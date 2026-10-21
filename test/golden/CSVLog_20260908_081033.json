@@ -106,6 +106,7 @@
       "idleN": 165,
       "dips": 0,
       "stalls": 0,
+      "keyOffs": 0,
       "lowest": null
     },
     "unitsConverted": false,

@@ -25,16 +25,29 @@ It reads standard OBD-II / EOBD data only.
   but there is a throttle channel, idle is taken from the log's own
   closed-throttle level, since absolute throttle position does not read 0 % at
   idle.
-- **Engine profiles.** Every engine-dependent limit (idle and stall rpm, idle
-  hunting spread, coolant, intake air and trim limits) lives in a profile, `m54`
-  or `l59` (`PROFILES` in `src/02-parse.js`). The profile is chosen
-  automatically: manifold pressure, narrow-band O2 voltage on sensor 1, knock
-  retard or an L59-style file name point to the L59, and wideband lambda points to
-  the M54. To see or change it, open the "Parse and channels" card and use the
-  **Engine profile** dropdown; the line next to it says what the choice was based
-  on. An override is not saved with a log in History, so a reloaded log is
-  detected again. The M54 profile holds the limits the app shipped with. The L59
-  values are starting estimates and need tuning against real logs.
+- **Vehicle profiles.** Every engine-dependent limit (idle and stall rpm, idle
+  hunting spread, coolant, intake air and trim limits) lives in a profile, `m54`,
+  `l59` or `evo` (`PROFILES` in `src/02-parse.js`). Choose the car in the
+  **Vehicle** menu in the app bar, or on the cards shown when no log is open.
+  The choice applies to the open log and to every log added after it, and is
+  remembered in this browser. On **Auto-detect** the profile is picked from the
+  log: an EvoScan file means the Evo; manifold pressure, narrow-band O2 voltage on
+  sensor 1, knock retard or an L59-style file name point to the L59; wideband
+  lambda points to the M54. "Parse and channels" says which profile is active and
+  why. The choice is not saved with a log in History. The M54 profile holds the
+  limits the app shipped with. The L59 and Evo values are starting estimates and
+  need tuning against real logs.
+- **Mitsubishi Evo (EvoScan).** EvoScan CSVs from a 4G63T Evo IV–IX are
+  recognised by their `LogID`/`LogEntryDate`/`LogEntrySeconds` columns, and the
+  MUT item names (`CoolantTemp`, `TimingAdv`, `Load1B`, `KnockSum`, `AirFlow`,
+  `InjDutyCycle`, `Battery`, ...) are mapped. EvoScan headers carry no units, so
+  they are read off the data: coolant above 135 for a tenth of the log means °F,
+  and a speed column in 1.2427 mph steps (the ECU's 2 km/h step) means mph. Trims
+  that read exactly zero in every frame are dropped as unanswered. Evo checks:
+  knock sum, injector duty and charging voltage, plus front O2 switching when
+  `O2Sensor` is logged. On EvoScan logs a stationary car with the throttle open
+  is a free rev, not idle, and a dip in rpm across a pause in logging of 60 s or
+  more is counted as a key-off rather than a stall.
 - **L59 checks.** With the L59 profile, these run when their channels exist:
   throttle plausibility, idle manifold vacuum, airflow against manifold
   pressure times rpm, front O2 sensor switching (stuck or lazy sensors, bank

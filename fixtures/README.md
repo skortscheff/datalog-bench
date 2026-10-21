@@ -21,3 +21,8 @@ and its rules have regression coverage until a real log is available. They cover
 healthy log, a lean bank with a stuck O2 sensor, a vacuum leak with open loop,
 knock with a real knock-retard PID, and timing pulls with no knock PID. Replace or
 add to them with real logs (GPS columns removed) when you have them.
+
+`EvoScan_2016-03-03.csv` is a real EvoScan capture from a Mitsubishi Lancer
+Evolution (4G63T), unedited. It has no GPS columns. Its trims, MAP and wideband
+read zero throughout, and its temperatures and speed are in °F and mph with no
+units in the header, which is what the EvoScan tests rely on.

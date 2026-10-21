@@ -92,6 +92,24 @@ body { margin: 0; background: var(--plane); color: var(--ink); font-family: var(
 .btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
 .btn.ghost:hover { background: var(--surface-sunk); color: var(--ink); }
 
+/* vehicle profile selector in the app bar */
+.vehicle { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-2); }
+.vehicle select { font-family: var(--sans); font-size: 12.5px; font-weight: 500; padding: 5px 8px; max-width: 200px;
+                  background: var(--surface); color: var(--ink); border: 1px solid var(--s1); border-radius: 6px; cursor: pointer; }
+
+/* vehicle profile cards on the empty state */
+.pick-step { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); }
+.profiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px;
+            max-width: 840px; margin: 0 auto 22px; text-align: left; }
+.pcard { appearance: none; cursor: pointer; font: inherit; color: inherit; text-align: left;
+         border: 1px solid var(--hair-strong); border-radius: 8px; background: var(--surface); padding: 11px 12px;
+         display: flex; flex-direction: column; gap: 3px; transition: border-color .12s, box-shadow .12s; }
+.pcard:hover { border-color: var(--ink-muted); }
+.pcard[aria-checked="true"] { border-color: var(--s1); box-shadow: inset 0 0 0 1px var(--s1); background: var(--drop); }
+.pcard b { font-size: 13px; font-weight: 600; }
+.pcard span { font-size: 11.5px; color: var(--ink-2); }
+.pcard small { font-size: 10.5px; color: var(--ink-muted); font-family: var(--mono); }
+
 /* loaded-file chips */
 .files { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .fchip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px;
@@ -341,6 +359,8 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
     </div>
     <div class="files" id="files"></div>
     <span class="grow"></span>
+    <label class="vehicle" title="Which car the logs come from. Sets the limits and checks used for the open log and for logs you add next.">Vehicle
+      <select id="vehicle-select" aria-label="Vehicle profile"></select></label>
     <label class="save-opt" title="Off by default. When on, each log you open is also sent to the history service on this server."><input type="checkbox" id="opt-save"> Save opened logs</label>
     <button class="btn" type="button" id="btn-history">History</button>
     <button class="btn" type="button" id="btn-add">Add logs</button>
@@ -383,8 +403,11 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
 <!-- empty state: shown only when no log is loaded -->
 <div class="wrap hero-empty" id="empty" hidden>
   <div class="dropzone" id="dropzone-big">
-    <h2>Drop an OBD-II datalog to analyse it</h2>
-    <p>CSV or tab-delimited text from Torque, OBDLink, Car Scanner, ScanXL and similar loggers. Analysis runs in this browser. Logs are sent to this server&rsquo;s history service only if you turn on &ldquo;Save opened logs&rdquo; or press &ldquo;Save this log&rdquo;.</p>
+    <h2>Drop a datalog to analyse it</h2>
+    <p class="pick-step">1 &middot; Which car is the log from?</p>
+    <div class="profiles" id="profile-cards" role="radiogroup" aria-label="Vehicle profile"></div>
+    <p class="pick-step">2 &middot; Add the log</p>
+    <p>CSV or tab-delimited text from Torque, OBDLink, Car Scanner, ScanXL and similar OBD-II loggers, or an EvoScan CSV from a Mitsubishi Evo. Analysis runs in this browser. Logs are sent to this server&rsquo;s history service only if you turn on &ldquo;Save opened logs&rdquo; or press &ldquo;Save this log&rdquo;.</p>
     <div class="acts">
       <button class="btn primary" type="button" id="btn-pick">Choose files</button>
       <button class="btn" type="button" id="btn-sample">Load the sample log</button>
@@ -392,7 +415,7 @@ footer.pg code { font-family: var(--mono); font-size: 11px; color: var(--ink-2);
     <dl class="supported">
       <div><dt>Reads</dt><dd>Comma, semicolon or tab delimited, with or without metadata header lines</dd></div>
       <div><dt>Maps</dt><dd>~20 OBD channels by name, with a manual override for anything it misses</dd></div>
-      <div><dt>Converts</dt><dd>&deg;F to &deg;C, mph to km/h, AFR to lambda, feet to metres</dd></div>
+      <div><dt>Converts</dt><dd>&deg;F to &deg;C, mph to km/h, AFR to lambda, feet to metres, including EvoScan logs that carry no units</dd></div>
       <div><dt>Diagnoses</dt><dd>Fuel trim, bank balance, load dependence, thermals, log quality</dd></div>
     </dl>
     <p class="fine">Every log you open here is also saved to this server's database for history and duplicate detection &mdash; re-opening the same export is recognised, not re-saved.</p>

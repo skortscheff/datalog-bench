@@ -49,7 +49,8 @@
           chip: isd > P.idleHuntSd ? "warning" : "good", lab: isd > P.idleHuntSd ? "hunting" : "steady" });
       }
       var rs = rpmStability(L, sel);
-      cand.push({ k: "Stalls", v: String(rs.stalls), u: "", sub: rs.dips + " dip" + (rs.dips === 1 ? "" : "s") + " under " + P.rpmDipBelow + " rpm" + (rs.lowest != null ? ", lowest " + Math.round(rs.lowest) : ""),
+      cand.push({ k: "Stalls", v: String(rs.stalls), u: "", sub: rs.dips + " dip" + (rs.dips === 1 ? "" : "s") + " under " + P.rpmDipBelow + " rpm" + (rs.lowest != null ? ", lowest " + Math.round(rs.lowest) : "") +
+          (rs.keyOffs ? ", " + rs.keyOffs + " key-off" + (rs.keyOffs === 1 ? "" : "s") + " not counted" : ""),
         chip: rs.stalls ? "critical" : rs.dips ? "warning" : "good",
         lab: rs.stalls ? "engine stopped" : rs.dips ? "near stall" : "none seen" });
     }
@@ -65,6 +66,12 @@
     if (HAVE.knock) { var kr = peak("knock");
       cand.push({ k: "Peak knock retard", v: fmt(kr, 1), u: "°", sub: "highest in window",
         chip: sev(kr, 4, 8), lab: kr == null ? "no data" : kr >= 8 ? "heavy" : kr >= 4 ? "notable" : kr > 0.5 ? "light" : "none" }); }
+    if (HAVE.knocksum) { var ks = peak("knocksum");
+      cand.push({ k: "Peak knock sum", v: fmt(ks, 0), u: "", sub: "highest in window",
+        chip: sev(ks, 4, 6), lab: ks == null ? "no data" : ks >= 6 ? "heavy" : ks >= 4 ? "notable" : ks > 0 ? "light" : "none" }); }
+    if (HAVE.injdc) { var dc = peak("injdc");
+      cand.push({ k: "Peak injector duty", v: fmt(dc, 0), u: "%", sub: "highest in window",
+        chip: sev(dc, 85, 95), lab: dc == null ? "no data" : dc >= 95 ? "maxed out" : dc >= 85 ? "near limit" : "headroom" }); }
     if (HAVE.vss) { var s = peak("vss");
       cand.push({ k: "Peak road speed", v: fmt(s, 0), u: "km/h", sub: "highest in window", chip: "neutral", lab: "logged" }); }
     if (!L.noTime) {
@@ -131,29 +138,11 @@
     row("Time base", L.noTime ? "frame index (no time column)" : "elapsed seconds");
     if (rep.decComma) row("Decimals", "comma");
 
-    /* engine profile: auto-detected from the channels, with a manual override */
-    (function () {
-      var d = el("div"); d.appendChild(el("dt", null, "Engine profile"));
-      var dd = el("dd"), ps = document.createElement("select");
-      ps.setAttribute("aria-label", "Engine profile");
-      var oa = document.createElement("option");
-      oa.value = ""; oa.textContent = "Auto (" + PROFILES[L.profileAuto].name + ")";
-      ps.appendChild(oa);
-      PROFILE_IDS.forEach(function (id) {
-        var o = document.createElement("option"); o.value = id; o.textContent = PROFILES[id].name; ps.appendChild(o);
-      });
-      ps.value = L.profileOverride || "";
-      ps.addEventListener("change", function () {
-        L.profileOverride = ps.value || null;
-        applyProfile(L);
-        analyze(L);
-        activate(AI, true);
-      });
-      dd.appendChild(ps);
-      if (!L.profileOverride && L.profileWhy && L.profileWhy.length)
-        dd.appendChild(el("small", null, " detected from: " + L.profileWhy.join(", ")));
-      d.appendChild(dd); host.appendChild(d);
-    })();
+    if (rep.format) row("Log format", rep.format);
+    /* the vehicle profile is chosen in the app bar; this row says where it came from */
+    row("Vehicle profile", profileOf(L).name + (L.profileOverride
+      ? " (chosen by you" + (L.profileAuto !== L.profileId ? "; the log looks like " + PROFILES[L.profileAuto].short : "") + ")"
+      : " (auto-detected" + (L.profileWhy && L.profileWhy.length ? " from: " + L.profileWhy.join(", ") : "") + ")"));
 
     var wl = document.getElementById("parse-warnings");
     wl.textContent = "";
@@ -438,6 +427,7 @@
     buildReadoutDefs();
     drawChannelPanel();
     drawFileChips();
+    drawVehiclePicker();
 
     var mapped = Object.keys(L.mapping).length;
     document.getElementById("pg-foot").innerHTML =
@@ -456,7 +446,7 @@
       nm.title = lg.name;
       if (!lg.error) { nm.type = "button"; nm.addEventListener("click", function () { activate(i); }); }
       c.appendChild(nm);
-      c.appendChild(el("span", "ct", lg.error ? "failed" : lg.n + " rows"));
+      c.appendChild(el("span", "ct", lg.error ? "failed" : profileOf(lg).short + " · " + lg.n + " rows"));
       var x = el("button", "x", "×");
       x.type = "button";
       x.setAttribute("aria-label", "Remove " + lg.name);
@@ -470,7 +460,7 @@
           if (want + d < LOGS.length && !LOGS[want + d].error) pick2 = want + d;
           else if (want - d >= 0 && want - d < LOGS.length && !LOGS[want - d].error) pick2 = want - d;
         }
-        if (pick2 < 0) { L = null; AI = -1; show("app", false); show("empty", true); drawFileChips(); return; }
+        if (pick2 < 0) { L = null; AI = -1; show("app", false); show("empty", true); drawFileChips(); drawVehiclePicker(); return; }
         if (pick2 === AI && !wasActive) { drawFileChips(); return; }
         activate(pick2);
       });
@@ -487,6 +477,8 @@
       alertBanner(name + ": " + lg.error);
       return false;
     }
+    /* the bundled sample is a BMW log, so it always gets its detected profile */
+    if (!isSample && vehiclePref()) { lg.profileOverride = vehiclePref(); applyProfile(lg); }
     analyze(lg);
     /* the bundled sample goes away only once a real log has parsed */
     if (!isSample) LOGS = LOGS.filter(function (x) { return !x.isSample; });
@@ -506,6 +498,58 @@
      ========================================================== */
   /* Saving to the history service is opt-in and off by default: logs can
      contain GPS positions, and nothing leaves the browser unless asked. */
+  /* ==========================================================
+     VEHICLE PROFILE — the app-bar menu and the empty-state cards
+     ========================================================== */
+  /* "" means auto-detect. The choice applies to the open log and to every log
+     added after it, and is remembered in this browser. */
+  function vehiclePref() {
+    try { var v = localStorage.getItem("dlb-profile") || ""; return PROFILES[v] ? v : ""; } catch (e) { return ""; }
+  }
+  function setVehiclePref(v) { try { localStorage.setItem("dlb-profile", v); } catch (e) {} }
+
+  function chooseVehicle(v) {
+    setVehiclePref(v);
+    if (L && !L.error) {
+      L.profileOverride = v || null;
+      applyProfile(L);
+      analyze(L);
+      activate(AI, true);
+    } else drawVehiclePicker();
+  }
+
+  function drawVehiclePicker() {
+    var cur = (L && !L.error) ? (L.profileOverride || "") : vehiclePref();
+    var sel = document.getElementById("vehicle-select");
+    if (sel) {
+      sel.textContent = "";
+      var oa = document.createElement("option");
+      oa.value = "";
+      oa.textContent = "Auto-detect" + (L && !L.error && !L.profileOverride ? " (" + PROFILES[L.profileAuto].short + ")" : "");
+      sel.appendChild(oa);
+      PROFILE_IDS.forEach(function (id) {
+        var o = document.createElement("option"); o.value = id; o.textContent = PROFILES[id].short; o.title = PROFILES[id].name; sel.appendChild(o);
+      });
+      sel.value = cur;
+    }
+    var host = document.getElementById("profile-cards");
+    if (!host) return;
+    host.textContent = "";
+    [{ id: "", short: "Auto-detect", blurb: "Pick the profile from the channels in the log", loggerNote: "any supported logger" }]
+      .concat(PROFILE_IDS.map(function (id) { return PROFILES[id]; }))
+      .forEach(function (p) {
+        var b = el("button", "pcard");
+        b.type = "button";
+        b.setAttribute("role", "radio");
+        b.setAttribute("aria-checked", String(p.id === vehiclePref()));
+        b.appendChild(el("b", null, p.short));
+        b.appendChild(el("span", null, p.blurb));
+        b.appendChild(el("small", null, p.loggerNote));
+        b.addEventListener("click", function () { chooseVehicle(p.id); });
+        host.appendChild(b);
+      });
+  }
+
   function saveEnabled() { try { return localStorage.getItem("dlb-save") === "1"; } catch (e) { return false; } }
   function setSaveEnabled(on) { try { localStorage.setItem("dlb-save", on ? "1" : "0"); } catch (e) {} }
 
@@ -834,6 +878,7 @@
   document.getElementById("btn-add").addEventListener("click", function () { input.click(); });
   document.getElementById("btn-pick").addEventListener("click", function () { input.click(); });
   document.getElementById("btn-sample").addEventListener("click", function () { loadSample(); });
+  document.getElementById("vehicle-select").addEventListener("change", function (e) { chooseVehicle(e.target.value); });
   document.getElementById("brush-reset").addEventListener("click", function () { F.win = [T0, T1]; HOVER = null; refresh(); });
   document.getElementById("events").addEventListener("pointerleave", function () { setEvent(null); });
 
@@ -865,5 +910,6 @@
   /* open in a working state rather than an empty shell */
   loadSample();
   if (!LOGS.length) { show("empty", true); show("app", false); }
+  drawVehiclePicker();
 })();
 </script>

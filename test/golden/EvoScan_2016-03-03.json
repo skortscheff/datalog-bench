@@ -1,0 +1,120 @@
+{
+  "error": null,
+  "have": {
+    "t": true,
+    "rpm": true,
+    "vss": true,
+    "load": true,
+    "spark": true,
+    "ect": true,
+    "iat": true,
+    "tps": true,
+    "knocksum": true,
+    "mafhz": true,
+    "injdc": true,
+    "batt": true,
+    "dt": true
+  },
+  "report": {
+    "delim": ",",
+    "headerLine": 1,
+    "columns": 119,
+    "rows": 4213,
+    "skipped": 0,
+    "ragged": 0,
+    "decComma": false,
+    "preamble": [],
+    "warnings": [],
+    "format": "EvoScan"
+  },
+  "findings": [
+    {
+      "id": "gaps",
+      "sev": "warning",
+      "tag": "Log quality",
+      "h": "67 sampling gaps in the capture"
+    },
+    {
+      "id": "iat",
+      "sev": "neutral",
+      "tag": "Intake air",
+      "h": "Intake air reaches 51 °C"
+    },
+    {
+      "id": "knock-sum",
+      "sev": "neutral",
+      "tag": "Knock",
+      "h": "4 knock events, worst knock sum 3"
+    },
+    {
+      "id": "coverage",
+      "sev": "neutral",
+      "tag": "Coverage",
+      "h": "2 diagnostic channels missing from this log"
+    },
+    {
+      "id": "ect",
+      "sev": "good",
+      "tag": "Cooling",
+      "h": "Coolant temperature stayed normal"
+    },
+    {
+      "id": "ratio",
+      "sev": "good",
+      "tag": "Driveline",
+      "h": "Engine and road speed stay proportionate"
+    },
+    {
+      "id": "inj-duty",
+      "sev": "good",
+      "tag": "Fuel delivery",
+      "h": "Injectors have headroom"
+    },
+    {
+      "id": "charging",
+      "sev": "good",
+      "tag": "Charging",
+      "h": "Charging voltage is normal"
+    }
+  ],
+  "metrics": {
+    "iatSlope": null,
+    "iatSlopeReason": "needs intake air temperature and fuel trim",
+    "cadence": {
+      "dt": 0.20986999999999512,
+      "repeatRun": 1
+    },
+    "rpmInfo": {
+      "idleMedian": 937.5,
+      "idleSd": 115.47898098599569,
+      "idleN": 476,
+      "dips": 0,
+      "stalls": 0,
+      "keyOffs": 1,
+      "lowest": null
+    },
+    "unitsConverted": true,
+    "skippedRules": [
+      {
+        "id": "trim-level",
+        "missing": "tt1"
+      },
+      {
+        "id": "bank-balance",
+        "missing": "tt1"
+      },
+      {
+        "id": "load-dep",
+        "missing": "tt1"
+      },
+      {
+        "id": "rich-excursion",
+        "missing": "tt1"
+      },
+      {
+        "id": "o2-switching",
+        "missing": "o2b1s1"
+      }
+    ]
+  }
+}

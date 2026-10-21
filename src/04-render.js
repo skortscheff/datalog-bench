@@ -286,6 +286,11 @@
     o2panel("o2r", "Rear O2 voltage (post-catalyst)", "o2b1s2", "o2b2s2",
       "A working catalyst holds the rear sensor steadier than the front one, usually near 0.6-0.8 V.");
     one("knock", "Knock retard", "deg", 1, { zero: 0 });
+    one("knocksum", "Knock sum", "count", 0, { zero: 0,
+      note: "The ECU's knock count, not degrees of retard. A few counts are common background noise on a 4G63." });
+    one("mafhz", "Airflow (MAF frequency)", "Hz", 0, { note: "Raw Karman-vortex MAF frequency; it rises with airflow but is not a mass flow." });
+    one("injdc", "Injector duty cycle", "%", 1, { ref: [{ v: 85, label: "85 %" }] });
+    one("batt", "Battery voltage", "V", 2);
     PANELS = d;
   }
 
@@ -335,6 +340,9 @@
     add("o2b1s1", "O2 B1", "V", 2);
     add("o2b2s1", "O2 B2", "V", 2);
     add("knock", "Knock", "°", 1);
+    add("knocksum", "Knock sum", "", 0);
+    add("injdc", "Inj. duty", "%", 1);
+    add("batt", "Battery", "V", 2);
     r.push(["State", function (i) { return ST[i] === "other" ? "transition" : ST[i]; }]);
     READ = r;
     var host = document.getElementById("readout");

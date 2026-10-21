@@ -344,14 +344,14 @@
       } },
 
     /* ======================================================
-       Rules below carry `extra: true`: they run only when the
-       active engine profile enables them (the L59 profile). They
-       are written against standard OBD-II PIDs, so each one says
-       what it can and cannot conclude.
+       Rules below carry `only`: they run only for the engine
+       profiles listed there. The L59 ones are written against
+       standard OBD-II PIDs, so each one says what it can and
+       cannot conclude.
        ====================================================== */
 
     /* ---------------- throttle ---------------- */
-    { id: "throttle", need: ["tps"], extra: true,
+    { id: "throttle", need: ["tps"], only: ["l59"],
       run: function (x) {
         var v = [], i;
         for (i = 0; i < x.n; i++) if (x.C.tps[i] != null && isFinite(x.C.tps[i])) v.push(x.C.tps[i]);
@@ -384,7 +384,7 @@
       } },
 
     /* ---------------- idle manifold pressure ---------------- */
-    { id: "map-idle", need: ["map"], extra: true,
+    { id: "map-idle", need: ["map"], only: ["l59"],
       run: function (x) {
         var idle = x.byState.idle;
         if (idle.length < 10) return null;
@@ -406,7 +406,7 @@
       } },
 
     /* ---------------- airflow vs manifold pressure ---------------- */
-    { id: "map-airflow", need: ["map", "maf", "rpm"], extra: true,
+    { id: "map-airflow", need: ["map", "maf", "rpm"], only: ["l59"],
       run: function (x) {
         var a = [], b = [], i;
         for (i = 0; i < x.n; i++) {
@@ -431,7 +431,7 @@
       } },
 
     /* ---------------- oxygen sensor activity ---------------- */
-    { id: "o2-switching", need: ["o2b1s1"], extra: true,
+    { id: "o2-switching", need: ["o2b1s1"], only: ["l59", "evo"],
       run: function (x) {
         var banks = [["B1", "o2b1s1"]];
         if (x.have.o2b2s1) banks.push(["B2", "o2b2s1"]);
@@ -491,7 +491,7 @@
       } },
 
     /* ---------------- closed loop ---------------- */
-    { id: "closed-loop", need: ["fuelsys"], extra: true,
+    { id: "closed-loop", need: ["fuelsys"], only: ["l59"],
       run: function (x) {
         var closed = 0, loadOpen = 0, badOpen = 0, tot = 0, i;
         for (i = 0; i < x.n; i++) {
@@ -520,7 +520,7 @@
       } },
 
     /* ---------------- knock retard (real PID) ---------------- */
-    { id: "knock", need: ["knock"], extra: true,
+    { id: "knock", need: ["knock"], only: ["l59"],
       run: function (x) {
         var ev0 = [], cur = null, i, worst = 0, worstI = -1;
         for (i = 0; i < x.n; i++) {
@@ -551,7 +551,7 @@
       } },
 
     /* ---------------- knock, inferred from timing ---------------- */
-    { id: "knock-inferred", need: ["spark", "rpm"], extra: true,
+    { id: "knock-inferred", need: ["spark", "rpm"], only: ["l59"],
       run: function (x) {
         if (x.have.knock) return null;
         var steady = x.have.load ? x.C.load : (x.have.tps ? x.C.tps : null);
@@ -577,20 +577,97 @@
           ev: ev };
       } },
 
+    /* ---------------- knock sum (Mitsubishi MUT) ---------------- */
+    /* Knock sum is the ECU's running knock count, not degrees of retard. The
+       limits are the usual 4G63 tuning guidance: a few counts are background
+       noise, a sustained count at or above about 6 means the ECU is pulling
+       real timing. */
+    { id: "knock-sum", need: ["knocksum"], only: ["evo"],
+      run: function (x) {
+        var evs = [], cur = null, worst = 0, worstI = -1, i;
+        for (i = 0; i < x.n; i++) {
+          var k = x.C.knocksum[i];
+          if (k != null && k > 0) {
+            if (cur == null) { cur = { start: i, peak: k }; evs.push(cur); }
+            if (k > cur.peak) cur.peak = k;
+            if (k > worst) { worst = k; worstI = i; }
+          } else cur = null;
+        }
+        var ev = [["knock events", String(evs.length)], ["worst knock sum", n1(worst, 0)]];
+        if (worstI >= 0) {
+          if (x.have.rpm) ev.push(["rpm at worst", n1(x.C.rpm[worstI], 0)]);
+          if (x.have.tps) ev.push(["throttle at worst", n1(x.C.tps[worstI], 0) + " %"]);
+          if (x.have.spark) ev.push(["timing at worst", n1(x.C.spark[worstI], 0) + " °"]);
+        }
+        if (!evs.length) return { sev: "good", tag: "Knock",
+          h: "No knock counted",
+          p: "Knock sum stays at zero across all " + x.n + " frames, so the ECU heard no knock in this log.",
+          ev: ev };
+        var sev = worst >= 6 ? "serious" : worst >= 4 ? "warning" : "neutral";
+        return { sev: sev, tag: "Knock",
+          h: evs.length + " knock event" + (evs.length > 1 ? "s" : "") + ", worst knock sum " + n1(worst, 0),
+          p: "Knock sum rose above zero " + evs.length + " time" + (evs.length > 1 ? "s" : "") + ", peaking at " + n1(worst, 0) +
+             (worstI >= 0 && !x.noTime ? " at " + Math.round(x.C.t[worstI]) + " s" : "") +
+             (worstI >= 0 && x.have.rpm ? " (" + n1(x.C.rpm[worstI], 0) + " rpm" + (x.have.tps ? ", " + n1(x.C.tps[worstI], 0) + " % throttle" : "") + ")" : "") + ". " +
+             (sev === "neutral"
+               ? "Counts of 3 or less are common on a 4G63 and are often mechanical noise rather than detonation, so this is worth watching rather than acting on."
+               : "Counts this high mean the ECU is pulling timing to protect the engine. Check fuel octane, intake air temperature and boost, and look for a lean mixture in the same frames."),
+          ev: ev };
+      } },
+
+    /* ---------------- injector duty ---------------- */
+    { id: "inj-duty", need: ["injdc"], only: ["evo"],
+      run: function (x) {
+        var pk = maxOf(x.C.injdc, x.all);
+        if (pk == null) return null;
+        var ev = [["peak duty", n1(pk, 0) + " %"]];
+        if (pk < 85) return { sev: "good", tag: "Fuel delivery",
+          h: "Injectors have headroom",
+          p: "Injector duty peaks at " + n1(pk, 0) + " %, below the 85 % at which injectors start to run out of time to open and close. Fuel delivery is not limiting this log.",
+          ev: ev };
+        return { sev: pk >= 95 ? "serious" : "warning", tag: "Fuel delivery",
+          h: "Injector duty reaches " + n1(pk, 0) + " %",
+          p: "Injector duty peaks at " + n1(pk, 0) + " %. Above about 85 % an injector has too little time left to open and close cleanly, and near 100 % it is held open and fuel can no longer rise with airflow, so the mixture goes lean under boost. Larger injectors, or less boost, are the usual answers.",
+          ev: ev };
+      } },
+
+    /* ---------------- charging voltage ---------------- */
+    { id: "charging", need: ["batt", "rpm"], only: ["evo"],
+      run: function (x) {
+        var v = [], i;
+        for (i = 0; i < x.n; i++) if (x.C.batt[i] != null && x.C.rpm[i] != null && x.C.rpm[i] > 500) v.push(x.C.batt[i]);
+        if (v.length < 20) return null;
+        var m = med(v), lo = pct(v, 0.02), hi = pct(v, 0.98);
+        var ev = [["running median", n1(m, 2) + " V"], ["running range", n1(lo, 2) + "–" + n1(hi, 2) + " V"]];
+        if (m < 13.0 || lo < 12.4) return { sev: "warning", tag: "Charging",
+          h: "Charging voltage is low with the engine running",
+          p: "With the engine running the voltage holds a median of " + n1(m, 2) + " V and falls to " + n1(lo, 2) +
+             " V. A healthy alternator holds about 13.5–14.5 V. Check the alternator, its belt and the battery terminals; low voltage also slows injector opening, which leans the mixture.",
+          ev: ev };
+        if (hi > 15.0) return { sev: "warning", tag: "Charging",
+          h: "Charging voltage runs high",
+          p: "With the engine running the voltage reaches " + n1(hi, 2) + " V. Above about 15 V the regulator is overcharging, which boils the battery and stresses electronics.",
+          ev: ev };
+        if (m < 13.5) return { sev: "neutral", tag: "Charging",
+          h: "Charging voltage is on the low side",
+          p: "With the engine running the voltage holds a median of " + n1(m, 2) + " V, a little under the 13.5–14.5 V a healthy alternator usually holds. Heavy electrical load at idle can explain it; if it stays there, check the alternator and battery terminals.",
+          ev: ev };
+        return { sev: "good", tag: "Charging",
+          h: "Charging voltage is normal",
+          p: "With the engine running the voltage holds a median of " + n1(m, 2) + " V (" + n1(lo, 2) + "–" + n1(hi, 2) + " V), inside the 13.5–15 V range of a healthy charging system.",
+          ev: ev };
+      } },
+
     /* ---------------- channel coverage ---------------- */
     { id: "coverage", need: [],
       run: function (x) {
-        var want = [["rpm", "engine speed"], ["vss", "vehicle speed"], ["ect", "coolant temperature"],
-                    ["iat", "intake air temperature"], ["maf", "mass air flow"], ["stft1", "short-term fuel trim"],
-                    ["ltft1", "long-term fuel trim"]];
-        want = want.concat(x.P.extraWant || []);
-        var miss = [];
+        var want = x.P.want, miss = [];
         for (var i = 0; i < want.length; i++) if (!x.have[want[i][0]]) miss.push(want[i][1]);
         if (!miss.length) return null;
         return { sev: "neutral", tag: "Coverage",
           h: miss.length + " diagnostic channel" + (miss.length > 1 ? "s" : "") + " missing from this log",
           p: "This file has no " + miss.slice(0, 4).join(", ") + (miss.length > 4 ? " and " + (miss.length - 4) + " more" : "") +
-             ", so the checks that depend on them were skipped rather than guessed at. Add those PIDs to your logger's list and the corresponding checks will run. If a channel is present under a name the parser did not recognise, map it by hand in the Channels panel above.",
+             ", so the checks that depend on them were skipped rather than guessed at. Add them to " + x.P.logger + " and the corresponding checks will run. If a channel is present under a name the parser did not recognise, map it by hand in the Channels panel above.",
           ev: [["mapped", String(Object.keys(x.have).length)], ["columns", String(x.L.head.length)]] };
       } }
   ];
@@ -627,25 +704,36 @@
      running; a stall is a dip that reaches RPM_STALL_BELOW. Cranking at the start
      and the key-off tail (a dip that runs to the last frame of the log) are not
      counted. Channels refresh slowly, so a dip shorter than one refresh can be
-     missed: these are minimum counts. */
+     missed: these are minimum counts. A dip that spans a pause in logging of
+     KEY_OFF_GAP seconds or more is a key cycle (EvoScan stops logging when the
+     ignition is off), and is counted in keyOffs instead. */
+  var KEY_OFF_GAP = 60;
   function rpmStability(L, idx) {
     var P = profileOf(L), RPM_RAN_ABOVE = P.rpmRanAbove, RPM_DIP_BELOW = P.rpmDipBelow, RPM_STALL_BELOW = P.rpmStallBelow;
-    var rpm = L.cols.rpm, last = L.n - 1, first = -1, i;
+    var rpm = L.cols.rpm, dt = L.noTime ? null : L.cols.dt, last = L.n - 1, first = -1, i;
     for (i = 0; i <= last; i++) if (rpm[i] != null && rpm[i] >= RPM_RAN_ABOVE) { first = i; break; }
-    var dips = 0, stalls = 0, lowest = null, cur = null, k, v;
+    var dips = 0, stalls = 0, keyOffs = 0, lowest = null, cur = null, paused = false, k, v;
     function close(endsLog) {
       if (cur == null) return;
-      if (!endsLog) { dips++; if (cur < RPM_STALL_BELOW) stalls++; if (lowest == null || cur < lowest) lowest = cur; }
-      cur = null;
+      if (paused) keyOffs++;
+      else if (!endsLog) { dips++; if (cur < RPM_STALL_BELOW) stalls++; if (lowest == null || cur < lowest) lowest = cur; }
+      cur = null; paused = false;
     }
     for (k = 0; k < idx.length; k++) {
       i = idx[k]; v = rpm[i];
       if (v == null || first < 0 || i < first) continue;
-      if (v < RPM_DIP_BELOW) cur = cur == null ? v : Math.min(cur, v);
-      else close(false);
+      /* the gap before this frame belongs to the dip it opens, continues or closes */
+      var gap = dt && dt[i] != null && dt[i] >= KEY_OFF_GAP;
+      if (v < RPM_DIP_BELOW) {
+        if (gap) paused = true;
+        cur = cur == null ? v : Math.min(cur, v);
+      } else {
+        if (cur != null && gap) paused = true;
+        close(false);
+      }
     }
     close(idx.length > 0 && idx[idx.length - 1] === last);
-    return { dips: dips, stalls: stalls, lowest: lowest };
+    return { dips: dips, stalls: stalls, keyOffs: keyOffs, lowest: lowest };
   }
 
   var IAT_SLOPE_MIN_FRAMES = 30, IAT_SLOPE_MIN_RANGE = 8;
@@ -693,7 +781,7 @@
       var rv = []; for (i = 0; i < idleR.length; i++) if (C.rpm[idleR[i]] != null) rv.push(C.rpm[idleR[i]]);
       var st = rpmStability(L, ctx.all);
       rpmInfo = { idleMedian: med(rv), idleSd: rv.length > 1 ? sd(rv) : null, idleN: rv.length,
-                  dips: st.dips, stalls: st.stalls, lowest: st.lowest };
+                  dips: st.dips, stalls: st.stalls, keyOffs: st.keyOffs, lowest: st.lowest };
     }
 
     var converted = (L.unitWarnings || []).some(function (w) { return /has been converted/.test(w); });
@@ -721,7 +809,7 @@
     RULES.forEach(function (rule) {
       /* profile-gated rules are not "skipped for missing channels": they simply
          do not apply to this engine, so they leave no trace in the skipped list */
-      if (rule.extra && !ctx.P.extraRules) return;
+      if (rule.only && rule.only.indexOf(ctx.P.id) < 0) return;
       for (var k = 0; k < rule.need.length; k++) if (!L.have[rule.need[k]]) { skipped.push({ id: rule.id, missing: rule.need[k] }); return; }
       var f;
       try { f = rule.run(ctx); } catch (e) { f = null; }

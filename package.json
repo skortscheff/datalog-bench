@@ -1,7 +1,7 @@
 {
   "name": "datalog-bench",
   "version": "0.1.0",
-  "description": "Browser-based analyser for OBD-II datalogs (BMW M54, Chevrolet L59)",
+  "description": "Browser-based analyser for OBD-II and EvoScan datalogs (BMW M54, Chevrolet L59, Mitsubishi Evo)",
   "license": "MIT",
   "private": true,
   "engines": { "node": ">=22.5" },

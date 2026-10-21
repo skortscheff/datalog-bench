@@ -20,10 +20,10 @@ function load(name) {
 }
 const csvs = readdirSync(FIX).filter((f) => f.endsWith(".csv"));
 
-test("every BMW fixture auto-detects the m54 profile and every L59 fixture the l59 profile", () => {
+test("every fixture auto-detects its own profile: BMW m54, L59 l59, EvoScan evo", () => {
   for (const f of csvs) {
     const { L } = load(f);
-    assert.equal(L.profileId, f.startsWith("L59_") ? "l59" : "m54", f + " detected " + L.profileId + " from " + L.profileWhy.join("; "));
+    assert.equal(L.profileId, f.startsWith("L59_") ? "l59" : f.startsWith("EvoScan_") ? "evo" : "m54", f + " detected " + L.profileId + " from " + L.profileWhy.join("; "));
   }
 });
 
@@ -96,4 +96,70 @@ test("profile thresholds drive the stall counts: a 420 rpm dip is a dip on m54 b
   };
   assert.equal(make("m54").dips, 1, "420 < 450");
   assert.equal(make("l59").dips, 0, "420 >= 400");
+});
+
+// ---- Mitsubishi Evo (EvoScan) ----
+const EVO = "EvoScan_2016-03-03.csv";
+
+test("the EvoScan log maps its MUT channels and reads °F and mph from the data", () => {
+  const { L } = load(EVO);
+  assert.equal(L.report.format, "EvoScan");
+  const src = Object.fromEntries(Object.entries(L.mapping).map(([k, i]) => [k, L.head[i]]));
+  assert.deepEqual(src, { t: "LogEntrySeconds", rpm: "RPM", vss: "Speed", load: "Load1B", spark: "TimingAdv",
+    ect: "CoolantTemp", iat: "AirTemp", tps: "TPS", knocksum: "KnockSum", mafhz: "AirFlow", injdc: "InjDutyCycle", batt: "Battery" });
+  assert.equal(L.noTime, false);
+  const ect = L.cols.ect.filter((v) => v != null);
+  assert.ok(Math.max(...ect) < 100 && Math.max(...ect) > 90, "206.6 °F peak is about 97 °C");
+  assert.ok(Math.abs(Math.max(...L.cols.vss.filter((v) => v != null)) - 58) < 0.1, "36.04 mph peak is 58 km/h");
+});
+
+test("all-zero trims, MAP and wideband from the EvoScan log are dropped, not analysed", () => {
+  const { L } = load(EVO);
+  for (const k of ["stft1", "ltft1", "map", "lam1"]) assert.ok(!L.have[k], k);
+  assert.ok(!L.unitWarnings.some((w) => /converted to lambda/.test(w)), "no AFR note for a dropped wideband");
+});
+
+test("the Evo rules run on the EvoScan log and the 9-minute logging pause is a key-off, not a stall", () => {
+  const { L, byId } = load(EVO);
+  assert.equal(byId["knock-sum"].sev, "neutral");
+  assert.match(byId["knock-sum"].h, /worst knock sum 3/);
+  assert.equal(byId["inj-duty"].sev, "good");
+  assert.equal(byId.charging.sev, "good");
+  assert.equal(L.metrics.rpmInfo.stalls, 0);
+  assert.equal(L.metrics.rpmInfo.keyOffs, 1);
+  assert.ok(L.metrics.rpmInfo.idleSd < 200, "free revs at standstill are not idle");
+});
+
+test("Evo rules do not run on other profiles", () => {
+  const { findings } = load("CSVLog_20260907_143525.csv");
+  for (const id of ["knock-sum", "inj-duty", "charging"]) assert.ok(!findings.some((f) => f.id === id), id);
+});
+
+function evoRows(ect, speed) {
+  const rows = ["LogID,LogEntryDate,LogEntryTime,LogEntrySeconds,RPM,Speed,CoolantTemp"];
+  for (let i = 0; i < 60; i++) rows.push([i + 1, "2016-03-03", "13:00:00", i * 0.2, 900, speed(i), ect].join(","));
+  return parseLog(rows.join("\n"), "evo.csv", false);
+}
+
+test("an EvoScan log set to metric units is left in °C and km/h", () => {
+  const L = evoRows(90, (i) => (i % 10) * 2);
+  assert.equal(L.profileId, "evo");
+  assert.equal(L.cols.ect[0], 90);
+  assert.equal(L.cols.vss[3], 6);
+  assert.ok(!L.unitWarnings.some((w) => /°F|mph/.test(w)));
+});
+
+test("an EvoScan log in °F with unquantised speed assumes mph", () => {
+  const L = evoRows(190, (i) => (i % 10) * 1.5);
+  assert.ok(Math.abs(L.cols.ect[0] - 87.78) < 0.01);
+  assert.ok(Math.abs(L.cols.vss[2] - 3 * 1.609344) < 1e-9);
+});
+
+test("the vehicle override puts an EvoScan log on another profile and back", () => {
+  const { L } = load(EVO);
+  L.profileOverride = "m54"; applyProfile(L);
+  assert.equal(L.profileId, "m54");
+  assert.ok(!JSON.parse(JSON.stringify(analyze(L))).some((f) => f.id === "knock-sum"));
+  L.profileOverride = null; applyProfile(L);
+  assert.equal(L.profileId, "evo");
 });
