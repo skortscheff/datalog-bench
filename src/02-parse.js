@@ -83,7 +83,9 @@
     { k: "injdc",  nm: "Injector duty cycle",  unit: "%",   grp: "mix",  pats: [],
       evo: [/^injdutycycle$/] },
     { k: "batt",   nm: "Battery voltage",      unit: "V",   grp: "core", pats: [],
-      evo: [/^battery$/] }
+      evo: [/^battery$/] },
+    { k: "octane", nm: "Octane flag",          unit: "%",   grp: "core", pats: [],
+      evo: [/^octaneflag$/] }
   ];
 
   /* EvoScan names its columns in CamelCase with no units ("CoolantTemp",
@@ -129,9 +131,11 @@
   };
 
   /* Short-term trim on a closed-loop engine moves all the time, so a short-term
-     trim that is exactly zero in every one of this many frames was not
-     answered by the ECU. A long-term trim stuck at zero beside it is dropped
-     too. EvoScan logs of some Evo ECUs look like this. */
+     trim that is exactly zero in every one of this many frames is either not
+     really being read, or the ECU never entered closed loop (on Mitsubishi MUT
+     ECUs 0 % is the neutral raw value). The log cannot tell which, so the
+     channel is not analysed as a trim, and L.deadTrims feeds the trim-flat
+     finding that says so. A long-term trim stuck at zero beside it goes too. */
   var DEAD_TRIM_FRAMES = 100;
 
   /* ==========================================================
@@ -177,8 +181,8 @@
            trimKpiWarn: 10, trimKpiCrit: 18, idleMapHigh: 50,
            want: BASE_WANT.concat([["tps", "throttle position"], ["map", "manifold pressure"]]),
            logger: "your logger's PID list" },
-    evo: { id: "evo", name: "Mitsubishi Lancer Evolution IV–IX (4G63T)", short: "Mitsubishi Evo",
-           blurb: "2.0 L turbo inline-4, MUT-protocol ECU",
+    evo: { id: "evo", name: "Mitsubishi Lancer Evolution I–IX (4G63T)", short: "Mitsubishi Evo",
+           blurb: "2.0 L turbo inline-4, Evo I–IX, MUT-protocol ECU",
            loggerNote: "EvoScan CSV",
            idleLo: 750, idleHi: 950,
            rpmRanAbove: 600, rpmDipBelow: 500, rpmStallBelow: 100, idleHuntSd: 200,
@@ -187,7 +191,8 @@
            want: [["rpm", "engine speed (RPM)"], ["vss", "vehicle speed (Speed)"], ["ect", "coolant temperature (CoolantTemp)"],
                   ["iat", "intake air temperature (AirTemp)"], ["mafhz", "airflow (AirFlow)"],
                   ["stft1", "short-term fuel trim (O2FeedbackTrim)"], ["ltft1", "long-term fuel trim (FuelTrim_InUse)"],
-                  ["tps", "throttle position (TPS)"], ["knocksum", "knock sum (KnockSum)"]],
+                  ["tps", "throttle position (TPS)"], ["knocksum", "knock sum (KnockSum)"],
+                  ["o2b1s1", "front oxygen sensor (O2Sensor)"], ["octane", "octane flag (OctaneFlag)"]],
            logger: "the EvoScan logging list" }
   };
   var PROFILE_IDS = ["m54", "l59", "evo"];
@@ -544,14 +549,18 @@
     if (C.lam1 && L.afrCols.lam1 && L.autoMap.lam1 === m.lam1)
       warn.push("No lambda column found, so air/fuel ratio was converted to lambda by dividing by " + STOICH + " (gasoline).");
 
+    var dead = [], deadKeys = [];
     [["stft1", "ltft1"], ["stft2", "ltft2"]].forEach(function (pair) {
       if (!C[pair[0]] || !allZero(C[pair[0]], DEAD_TRIM_FRAMES)) return;
       pair.forEach(function (k) {
         if (k !== pair[0] && (!C[k] || !allZero(C[k], DEAD_TRIM_FRAMES))) return;
-        warn.push("“" + L.head[m[k]] + "” read exactly zero in every frame. A working closed-loop trim never does that, so the ECU did not answer it and the channel was dropped rather than analysed.");
+        warn.push("“" + L.head[m[k]] + "” read exactly zero in every frame, so it was not analysed as a fuel trim. See the fuel trim finding for what that can mean.");
+        dead.push(L.head[m[k]]); deadKeys.push(k);
         delete C[k]; delete m[k];
       });
     });
+    L.deadTrims = dead;
+    L.deadTrimKeys = deadKeys;
 
     /* ---- time base ---- */
     var tWarn = null;

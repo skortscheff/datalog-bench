@@ -35,6 +35,18 @@
       "h": "67 sampling gaps in the capture"
     },
     {
+      "id": "trim-flat",
+      "sev": "warning",
+      "tag": "Fuel trim",
+      "h": "Fuel trims read exactly 0 % for the whole log"
+    },
+    {
+      "id": "timing-load",
+      "sev": "warning",
+      "tag": "Ignition timing",
+      "h": "Timing sits near zero under load (median 0°)"
+    },
+    {
       "id": "iat",
       "sev": "neutral",
       "tag": "Intake air",

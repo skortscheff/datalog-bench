@@ -163,3 +163,45 @@ test("the vehicle override puts an EvoScan log on another profile and back", () 
   L.profileOverride = null; applyProfile(L);
   assert.equal(L.profileId, "evo");
 });
+
+test("flat-zero trims raise a warning that names both causes, and are not listed as missing", () => {
+  const { byId } = load(EVO);
+  assert.equal(byId["trim-flat"].sev, "warning");
+  assert.match(byId["trim-flat"].p, /O2FeedbackTrim, FuelTrim_InUse/);
+  assert.match(byId["trim-flat"].p, /never entered closed loop/);
+  assert.match(byId["trim-flat"].p, /O2Sensor/);
+  assert.match(byId.coverage.h, /^2 diagnostic channels/, "only O2Sensor and OctaneFlag are missing");
+  assert.doesNotMatch(byId.coverage.p, /fuel trim/);
+});
+
+test("timing near zero under load is flagged on the Evo log and points at OctaneFlag", () => {
+  const { byId } = load(EVO);
+  assert.equal(byId["timing-load"].sev, "warning");
+  assert.match(byId["timing-load"].h, /median 0°/);
+  assert.match(byId["timing-load"].p, /Log OctaneFlag/);
+});
+
+function evoLoad(timing, octane) {
+  const head = "LogID,LogEntryDate,LogEntryTime,LogEntrySeconds,RPM,Speed,CoolantTemp,Load1B,TimingAdv,KnockSum" + (octane != null ? ",OctaneFlag" : "");
+  const rows = [head];
+  for (let i = 0; i < 60; i++) rows.push([i + 1, "2016-03-03", "13:00:00", i * 0.2, 3000, 40, 190, 150, timing, 0].concat(octane != null ? [octane] : []).join(","));
+  const L = parseLog(rows.join("\n"), "evo.csv", false);
+  return Object.fromEntries(JSON.parse(JSON.stringify(analyze(L))).map((f) => [f.id, f]));
+}
+
+test("timing under load: healthy timing passes, and a low octane flag is reported as the low-octane map", () => {
+  assert.equal(evoLoad(12)["timing-load"].sev, "good");
+  const low = evoLoad(0, 40)["timing-load"];
+  assert.equal(low.sev, "warning");
+  assert.match(low.p, /moved toward its low-octane map/);
+  assert.match(evoLoad(0, 100)["timing-load"].p, /does not suggest the low-octane map/);
+});
+
+test("flat-zero trims are reported on an OBD log too", () => {
+  const rows = ["Time (sec),Engine RPM (RPM),Short term fuel trim Bank 1 (%),Long term fuel trim Bank 1 (%)"];
+  for (let i = 0; i < 150; i++) rows.push([i, 800, 0, 0].join(","));
+  const L = parseLog(rows.join("\n"), "obd.csv", false);
+  const f = JSON.parse(JSON.stringify(analyze(L))).find((x) => x.id === "trim-flat");
+  assert.equal(f.sev, "warning");
+  assert.doesNotMatch(f.p, /EvoScan/);
+});

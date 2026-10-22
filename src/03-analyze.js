@@ -577,6 +577,70 @@
           ev: ev };
       } },
 
+    /* ---------------- fuel trims flat at zero ---------------- */
+    /* buildChannels drops a short-term trim that reads exactly 0 in every frame
+       (L.deadTrims). Dropping it quietly would hide a possible open-loop fault,
+       so this says what the flat zero can mean. */
+    { id: "trim-flat", need: [],
+      run: function (x) {
+        var dead = x.L.deadTrims || [];
+        if (!dead.length) return null;
+        var warmRun = 0, i;
+        for (i = 0; i < x.n; i++) {
+          if (x.C.rpm && (x.C.rpm[i] == null || x.C.rpm[i] < 500)) continue;
+          if (x.C.ect && (x.C.ect[i] == null || x.C.ect[i] <= 70)) continue;
+          warmRun++;
+        }
+        var ev = [["flat columns", dead.join(", ")], ["warm running frames", String(warmRun)]];
+        return { sev: "warning", tag: "Fuel trim",
+          h: "Fuel trims read exactly 0 % for the whole log",
+          p: "The trim column" + (dead.length > 1 ? "s " : " ") + dead.join(", ") + (dead.length > 1 ? " read" : " reads") +
+             " exactly 0 % in every frame" + (warmRun ? ", including " + warmRun + " warm, running frames" : "") +
+             ". A working closed-loop short-term trim moves every second, so one of two things is true. Either the trims are not really being read (for example the logger is set up for a different ECU), or the ECU never entered closed loop, which a dead or unplugged front oxygen sensor or a tune with closed loop disabled would cause. The log cannot tell these apart, so no trim checks were run. Log the front oxygen sensor voltage" +
+             (x.P.id === "evo" ? " (O2Sensor in EvoScan)" : "") +
+             ": if it swings between about 0.1 and 0.9 V while the trims stay at 0, it is a logging problem; if it sits flat, the engine is running open loop.",
+          ev: ev };
+      } },
+
+    /* ---------------- timing under load (Mitsubishi MUT) ---------------- */
+    /* Load here is the MUT load value (about 100 at atmospheric, rising with
+       boost). Timing near zero while boost builds, without the knock count to
+       explain it, is either a mismatched timing formula in the logger or the
+       ECU running its low-octane map. The check reports, it does not decide. */
+    { id: "timing-load", need: ["spark", "load", "rpm"], only: ["evo"],
+      run: function (x) {
+        var f = [], i;
+        for (i = 0; i < x.n; i++) {
+          var r = x.C.rpm[i], ld = x.C.load[i], s = x.C.spark[i];
+          if (r == null || ld == null || s == null || r < 1500 || r > 4500 || ld < 120) continue;
+          if (x.C.ect && (x.C.ect[i] == null || x.C.ect[i] <= 70)) continue;
+          if (x.have.injdc && x.C.injdc[i] != null && x.C.injdc[i] <= 0) continue;
+          f.push(i);
+        }
+        if (f.length < 10) return null;
+        var m = med(at(x.C.spark, f)), lo = pct(at(x.C.spark, f), 0.1);
+        var kmax = x.have.knocksum ? maxOf(x.C.knocksum, f) : null;
+        var oct = x.have.octane ? med(at(x.C.octane, f)) : null;
+        var ev = [["median timing", n1(m, 0) + " °"], ["10th percentile", n1(lo, 0) + " °"], ["frames", String(f.length)]];
+        if (kmax != null) ev.push(["worst knock sum there", n1(kmax, 0)]);
+        if (oct != null) ev.push(["octane flag", n1(oct, 0) + " %"]);
+        if (m > 5) return { sev: "good", tag: "Ignition timing",
+          h: "Timing holds up under load",
+          p: "Across " + f.length + " warm frames at load 120 or more between 1500 and 4500 rpm, ignition timing has a median of " + n1(m, 0) + "°, so the ECU is not holding timing near zero as boost builds.",
+          ev: ev };
+        var knockExplains = kmax != null && kmax > 3;
+        return { sev: "warning", tag: "Ignition timing",
+          h: "Timing sits near zero under load (median " + n1(m, 0) + "°)",
+          p: "Across " + f.length + " warm frames at load 120 or more between 1500 and 4500 rpm, ignition timing has a median of " + n1(m, 0) + "° and falls to " + n1(lo, 0) + "°" +
+             (kmax != null ? ", while knock sum in the same frames peaks at only " + n1(kmax, 0) : "") + ". " +
+             (knockExplains ? "Knock counts this high explain part of it: the ECU is retarding to protect the engine. " : "That is low for a 4G63T, and the knock count does not explain it. ") +
+             "Two causes fit. The logger's timing formula may not match this ECU (EvoScan definitions for older Mitsubishi ECUs differ in their offset), which shifts every reading by a fixed amount; check with a timing light at idle against the logged value, with basic timing at 5° BTDC. Or the timing is real and the ECU is running its low-octane map after repeated knock, which points at fuel octane, carbon build-up, a lean mixture under boost, or a noisy knock sensor. " +
+             (oct != null
+               ? "The octane flag (100 % is the high-octane map) reads " + n1(oct, 0) + " % here" + (oct < 90 ? ", so the ECU has moved toward its low-octane map." : ", which does not suggest the low-octane map.")
+               : "Log OctaneFlag in EvoScan to see which map the ECU is on."),
+          ev: ev };
+      } },
+
     /* ---------------- knock sum (Mitsubishi MUT) ---------------- */
     /* Knock sum is the ECU's running knock count, not degrees of retard. The
        limits are the usual 4G63 tuning guidance: a few counts are background
@@ -662,7 +726,9 @@
     { id: "coverage", need: [],
       run: function (x) {
         var want = x.P.want, miss = [];
-        for (var i = 0; i < want.length; i++) if (!x.have[want[i][0]]) miss.push(want[i][1]);
+        /* a trim that was logged but read flat zero has its own finding (trim-flat) */
+        var flat = x.L.deadTrimKeys || [];
+        for (var i = 0; i < want.length; i++) if (!x.have[want[i][0]] && flat.indexOf(want[i][0]) < 0) miss.push(want[i][1]);
         if (!miss.length) return null;
         return { sev: "neutral", tag: "Coverage",
           h: miss.length + " diagnostic channel" + (miss.length > 1 ? "s" : "") + " missing from this log",

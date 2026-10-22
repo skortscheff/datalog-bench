@@ -37,15 +37,20 @@ It reads standard OBD-II / EOBD data only.
   why. The choice is not saved with a log in History. The M54 profile holds the
   limits the app shipped with. The L59 and Evo values are starting estimates and
   need tuning against real logs.
-- **Mitsubishi Evo (EvoScan).** EvoScan CSVs from a 4G63T Evo IV–IX are
+- **Mitsubishi Evo (EvoScan).** EvoScan CSVs from a 4G63T Evo I–IX are
   recognised by their `LogID`/`LogEntryDate`/`LogEntrySeconds` columns, and the
   MUT item names (`CoolantTemp`, `TimingAdv`, `Load1B`, `KnockSum`, `AirFlow`,
   `InjDutyCycle`, `Battery`, ...) are mapped. EvoScan headers carry no units, so
   they are read off the data: coolant above 135 for a tenth of the log means °F,
   and a speed column in 1.2427 mph steps (the ECU's 2 km/h step) means mph. Trims
-  that read exactly zero in every frame are dropped as unanswered. Evo checks:
-  knock sum, injector duty and charging voltage, plus front O2 switching when
-  `O2Sensor` is logged. On EvoScan logs a stationary car with the throttle open
+  that read exactly zero in every frame are not analysed as trims; a warning
+  finding says the zeros mean either the trims are not really read or the ECU
+  never entered closed loop, and asks for `O2Sensor` to tell them apart (this
+  applies to every profile). Evo checks: knock sum, injector duty, charging
+  voltage, and timing under load (load 120+, 1500–4500 rpm), which warns when
+  timing sits near zero without knock to explain it and names the two causes
+  (a mismatched timing formula in EvoScan, or the low-octane map; `OctaneFlag`
+  is read when logged). Front O2 switching runs when `O2Sensor` is logged. On EvoScan logs a stationary car with the throttle open
   is a free rev, not idle, and a dip in rpm across a pause in logging of 60 s or
   more is counted as a key-off rather than a stall.
 - **L59 checks.** With the L59 profile, these run when their channels exist:

@@ -291,6 +291,7 @@
     one("mafhz", "Airflow (MAF frequency)", "Hz", 0, { note: "Raw Karman-vortex MAF frequency; it rises with airflow but is not a mass flow." });
     one("injdc", "Injector duty cycle", "%", 1, { ref: [{ v: 85, label: "85 %" }] });
     one("batt", "Battery voltage", "V", 2);
+    one("octane", "Octane flag", "%", 0, { note: "100 % means the ECU is on its high-octane timing map; it falls toward the low-octane map after repeated knock." });
     PANELS = d;
   }
 
@@ -343,6 +344,7 @@
     add("knocksum", "Knock sum", "", 0);
     add("injdc", "Inj. duty", "%", 1);
     add("batt", "Battery", "V", 2);
+    add("octane", "Octane", "%", 0);
     r.push(["State", function (i) { return ST[i] === "other" ? "transition" : ST[i]; }]);
     READ = r;
     var host = document.getElementById("readout");

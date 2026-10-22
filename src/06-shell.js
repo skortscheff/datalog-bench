@@ -66,6 +66,21 @@
     if (HAVE.knock) { var kr = peak("knock");
       cand.push({ k: "Peak knock retard", v: fmt(kr, 1), u: "°", sub: "highest in window",
         chip: sev(kr, 4, 8), lab: kr == null ? "no data" : kr >= 8 ? "heavy" : kr >= 4 ? "notable" : kr > 0.5 ? "light" : "none" }); }
+    /* trims logged but flat at 0 %: see the trim-flat rule in 03-analyze.js */
+    if (!HAVE.tt1 && L.deadTrims && L.deadTrims.length)
+      cand.push({ k: "Fuel trim", v: "0", u: "%", sub: "flat for the whole log: not read, or open loop",
+        chip: "warning", lab: "check O2 sensor" });
+    /* Mitsubishi load 120+ is boost building; same frames as the timing-load rule */
+    if (P.id === "evo" && HAVE.spark && HAVE.load && HAVE.rpm) {
+      var tl = sel.filter(function (i) {
+        return C.rpm[i] != null && C.rpm[i] >= 1500 && C.rpm[i] <= 4500 && C.load[i] != null && C.load[i] >= 120 &&
+          (!HAVE.ect || C.ect[i] > 70) && !(HAVE.injdc && C.injdc[i] != null && C.injdc[i] <= 0);
+      });
+      var tv2 = pick(C.spark, tl).filter(function (x) { return x != null; });
+      if (tv2.length >= 10) { var tm = medOf(tv2);
+        cand.push({ k: "Timing under load", v: fmt(tm, 0), u: "°", sub: "median, load 120+, " + tv2.length + " frames",
+          chip: tm > 5 ? "good" : "warning", lab: tm > 5 ? "holding" : "near zero" }); }
+    }
     if (HAVE.knocksum) { var ks = peak("knocksum");
       cand.push({ k: "Peak knock sum", v: fmt(ks, 0), u: "", sub: "highest in window",
         chip: sev(ks, 4, 6), lab: ks == null ? "no data" : ks >= 6 ? "heavy" : ks >= 4 ? "notable" : ks > 0 ? "light" : "none" }); }
