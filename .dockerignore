@@ -1,5 +1,4 @@
 .git
-.github
 dist
 node_modules
 __pycache__

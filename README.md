@@ -7,7 +7,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/skortscheff/datalog-bench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/skortscheff/datalog-bench/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="Node 22.5+" src="https://img.shields.io/badge/node-%E2%89%A5%2022.5-339933.svg">
 </p>
@@ -226,7 +225,6 @@ The `note` column is added to an existing database on start-up.
     db/                  history API (node:http + node:sqlite)
     docker/              nginx configs and the tiles proxy image
     test/                golden tests, parser edge cases, profile tests, db tests
-    .github/workflows/   CI: tests, build gate, Docker image build
     fixtures/            sample inputs for the tests (GPS columns removed);
                          L59_*.csv are synthetic, see fixtures/README.md
     make-l59-fixtures.py generates the synthetic L59 fixtures (seeded)
@@ -257,7 +255,7 @@ Python, Node and Docker are needed for building and testing only.
 ## Contributing
 
 Contributions are welcome. Run `npm test`, `npm run test:db` and `python3
-build.py` before opening a pull request; CI runs the same checks. Do not add
+build.py` before opening a pull request. Do not add
 your own logs to `fixtures/`, because they can contain GPS positions.
 
 Saved-log limits can be tuned with environment variables on the `db` service:
