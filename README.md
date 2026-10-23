@@ -1,11 +1,65 @@
-# Datalog Bench
+<h1 align="center">Datalog Bench</h1>
 
-A browser-based analyser for OBD-II datalogs from the BMW M54 and the Chevrolet
-L59 (5.3 L V8), recorded with OBD Fusion over an ELM327 adapter. Drop in one or more CSV logs to see fuel
-trims, engine channels and route data on a shared time axis, and keep a history
-of past sessions to compare side by side.
+<p align="center">
+  A browser-based analyser for OBD-II and EvoScan datalogs.<br>
+  Fuel trims, engine channels and operating-state breakdowns on a shared time axis,<br>
+  with a saved history for side-by-side comparison of sessions.
+</p>
 
-It reads standard OBD-II / EOBD data only.
+<p align="center">
+  <a href="https://github.com/skortscheff/datalog-bench/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/skortscheff/datalog-bench/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <img alt="Node 22.5+" src="https://img.shields.io/badge/node-%E2%89%A5%2022.5-339933.svg">
+</p>
+
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Datalog Bench dashboard showing session summary tiles for a BMW M54 log" width="100%">
+</p>
+
+Datalog Bench reads CSV logs from the BMW M54 and the Chevrolet L59 (5.3 L V8),
+recorded with OBD Fusion over an ELM327 adapter, and from the Mitsubishi Lancer
+Evolution (4G63T), recorded with EvoScan. Drop in one or more logs to see fuel
+trims and engine channels on a shared time axis, check them against
+engine-specific rules, and keep a history of past sessions to compare.
+
+It reads standard OBD-II / EOBD data, plus EvoScan MUT items for the Evo.
+
+## Quick start
+
+    docker compose up -d --build
+
+Then open <http://localhost:8080>. A built-in sample session loads on first
+visit. See [Running it](#running-it) for details, including how to use the app
+without Docker.
+
+## Screenshots
+
+The dashboard above shows the session summary: median trim per bank, peak
+temperatures and speeds, idle speed, stalls and logging gaps, each tagged
+against the active vehicle profile's limits. Drag on the timeline to select a
+window, and filter frames by operating state.
+
+### Fuel correction
+
+Total correction (short-term plus long-term trim) with the ±10 % band marked,
+followed by separate long-term and short-term charts for both banks.
+
+![Total and long-term fuel correction charts](docs/images/fuel-correction.png)
+
+### Trim by operating state
+
+Median total correction split by warm-up, idle and driving, on a fixed
+−30 to +30 % axis. This shows whether a trim problem appears at idle, under
+load, or both.
+
+![Median fuel trim by operating state](docs/images/operating-states.png)
+
+### Channels
+
+Every channel on one time axis with a shared crosshair. Hover or use the arrow
+keys to step through frames.
+
+![Engine speed, vehicle speed, airflow, load, temperatures and lambda panels](docs/images/channels.png)
 
 ## Features
 
