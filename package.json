@@ -4,7 +4,7 @@
   "description": "Browser-based analyser for OBD-II and EvoScan datalogs (BMW M54, Chevrolet L59, Mitsubishi Evo)",
   "license": "MIT",
   "private": true,
-  "engines": { "node": ">=22.5" },
+  "engines": { "node": ">=22.13" },
   "scripts": {
     "test": "node test/run.mjs && node --test test/parse.test.mjs test/profile.test.mjs",
     "test:db": "node --test test/db.test.mjs"

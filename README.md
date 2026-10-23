@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-  <img alt="Node 22.5+" src="https://img.shields.io/badge/node-%E2%89%A5%2022.5-339933.svg">
+  <img alt="Node 22.13+" src="https://img.shields.io/badge/node-%E2%89%A5%2022.13-339933.svg">
 </p>
 
 <p align="center">
@@ -155,6 +155,39 @@ keys to step through frames.
   temperatures, trim-versus-intake-air slope at warm idle, logging cadence, units,
   and which checks each log was too sparse to run.
 
+## Requirements
+
+Datalog Bench has two ways to run. Pick one.
+
+**Docker (recommended).** The full app, including history and Compare.
+
+| Requirement | Notes |
+|---|---|
+| Docker with the Compose v2 plugin | The command is `docker compose`, not `docker-compose`. Docker Desktop includes it. |
+| Internet access on the first build | Docker pulls the `node:24-slim` and `nginx:1.27-alpine` images and installs Python 3 inside the build. |
+| Free port 8080 on `127.0.0.1` | Change the port in `compose.yaml` if something else uses it. |
+
+You do not need Node or Python on the host. The image build runs the test
+suites and stops if any test fails.
+
+**Single HTML file.** Analysis only. There is no history, Compare or satellite
+map.
+
+| Requirement | Notes |
+|---|---|
+| Python 3 | Runs `build.py`. |
+| Node.js 22.13 or later | `build.py` uses `node --check` to validate the page's JavaScript. |
+| A current Chrome, Firefox, Safari or Edge | To open the built `dist/Datalog-Bench.html`. |
+
+The same Node version runs the tests locally. `npm run test:db` uses
+`node:sqlite`, which Node 22.13 enabled without a flag. No `npm install` is
+needed: the project has no dependencies.
+
+These were checked with Docker 29 and Compose v5, Python 3.12 and Node 24.
+
+Logs come from your own recording setup: OBD Fusion over an ELM327 adapter
+(M54, L59) or EvoScan (Evo). The app does not talk to the car.
+
 ## Running it
 
 The stack runs in Docker Compose:
@@ -182,7 +215,7 @@ proxy.
 To use the app without Docker, build the single HTML file and open it in a
 browser:
 
-    python build.py        # writes dist/Datalog-Bench.html
+    python3 build.py       # writes dist/Datalog-Bench.html
 
 Without the `db` service there is no history or Compare, and without `tiles`
 the map has no satellite imagery. Analysis of the open log still works.
@@ -236,15 +269,14 @@ inside the single `(function () { ... })()` that `01-shell.html` opens and
 
 Build and test:
 
-    python build.py            # assemble dist/Datalog-Bench.html and run the checks
-    python build.py --check    # validate only
+    python3 build.py           # assemble dist/Datalog-Bench.html and run the checks
+    python3 build.py --check   # validate only
     npm test                   # golden tests over fixtures, plus parser edge cases
     node test/run.mjs --update # rewrite golden files after an intentional change
                                # (review the git diff of test/golden/ before committing)
     npm run test:db            # history service tests
 
-Requirements: Node 22.5 or later (the history service uses `node:sqlite`),
-Python 3, and Docker for the compose stack.
+See [Requirements](#requirements) for the versions needed.
 
 `build.py` fails if the assembled page has unbalanced HTML, a missing
 placeholder, the wrong number of `<script>` elements, or a JavaScript syntax

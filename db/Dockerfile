@@ -1,7 +1,7 @@
 # Simple database service: node:http + node:sqlite (both built into Node,
 # zero extra dependencies), storing every uploaded log with a content-hash
 # dedup key. Persisted to a named volume mounted at /data.
-# node:sqlite needs Node >=22.5; the web build stage uses the same node:24.
+# node:sqlite needs Node >=22.13 without a flag; the web build stage uses the same node:24.
 # Pin by digest (node:24-slim@sha256:<digest>) for reproducible builds.
 
 # --- stage 1: test gate ---
